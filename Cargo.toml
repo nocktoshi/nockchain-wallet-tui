@@ -1,0 +1,39 @@
+[package]
+name = "nockchain-wallet-tui"
+version.workspace = true
+edition.workspace = true
+license = "MIT OR Apache-2.0"
+description = "Interactive terminal UI for nockchain-wallet"
+
+[lib]
+name = "nockchain_wallet_tui"
+path = "src/lib.rs"
+
+[[bin]]
+name = "nockchain-wallet-tui"
+path = "src/main.rs"
+
+[dependencies]
+rustls = { workspace = true }
+arboard = "3.3"
+axum = { workspace = true }
+bs58 = { workspace = true }
+clap = { workspace = true, features = ["derive", "cargo"] }
+crossterm.workspace = true
+dotenvy = "0.15"
+getrandom.workspace = true
+hex.workspace = true
+http = "1"
+nockapp = { workspace = true }
+nockapp-grpc = { workspace = true }
+nockchain-types = { workspace = true }
+nockchain-wallet = { git = "https://github.com/nockchain/nockchain", branch = "dev", path = "crates/nockchain-wallet" }
+ratatui.workspace = true
+regex = "1"
+reqwest = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+wallet-tx-builder = { git = "https://github.com/nockchain/nockchain", branch = "dev", path = "crates/wallet-tx-builder" }
