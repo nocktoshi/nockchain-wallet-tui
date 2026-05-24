@@ -20,7 +20,7 @@ Pin `nockchain-wallet-tui` to the same git commit (or crates.io release) as `noc
 
 ```toml
 # External repo / Cargo.toml
-nockchain-wallet = { git = "https://github.com/nockchain/nockchain", branch = "dev" }
+nockchain-wallet = { git = "https://github.com/nocktoshi/nockchain", branch = "dev" }
 ```
 
 ## Architecture
