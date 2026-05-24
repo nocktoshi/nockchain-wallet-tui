@@ -27,7 +27,7 @@ http = "1"
 nockapp = { workspace = true }
 nockapp-grpc = { workspace = true }
 nockchain-types = { workspace = true }
-nockchain-wallet = { git = "https://github.com/nockchain/nockchain", branch = "dev", path = "crates/nockchain-wallet" }
+nockchain-wallet = { git = "https://github.com/nocktoshi/nockchain", branch = "dev", path = "crates/nockchain-wallet" }
 ratatui.workspace = true
 regex = "1"
 reqwest = { workspace = true }
@@ -36,4 +36,4 @@ serde_json = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-wallet-tx-builder = { git = "https://github.com/nockchain/nockchain", branch = "dev", path = "crates/wallet-tx-builder" }
+wallet-tx-builder = { git = "https://github.com/nocktoshi/nockchain", branch = "dev", path = "crates/wallet-tx-builder" }
