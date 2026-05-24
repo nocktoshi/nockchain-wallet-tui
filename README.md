@@ -1,5 +1,9 @@
 # Nockchain Wallet TUI
 
+<img width="656" height="608" alt="telegram-cloud-photo-size-1-4940823604891421713-y" src="https://github.com/user-attachments/assets/c45fdd7b-902a-4a26-bc53-220620dab5bd" />
+<br />
+<br />
+
 Interactive full-screen terminal UI for [`nockchain-wallet`](../nockchain-wallet/), built with [ratatui](https://github.com/ratatui-org/ratatui) and [crossterm](https://github.com/crossterm-rs/crossterm). The TUI exposes the same wallet kernel commands as the CLI, plus a session-scoped JSON HTTP API for automation.
 
 ## Launch
@@ -43,7 +47,60 @@ Wallet work always goes through `nockchain_wallet::dispatch::execute_wallet_comm
 └─────────────────────────────────────────────────────────────┘
 ```
 
-See [`src/README.md`](src/README.md) for module-level detail (event loop, screens, API routes).
+### Output layer (`view/` + `wallet_outcome`)
+
+The TUI prefers structured **`WalletEvent`** values from kernel `[%wallet <kind> [%v1 …]]` effects (decoded in `nockchain-wallet`). `view::render_command_output` formats them for the status panel. When no structured event exists, it falls back to captured kernel `%markdown`.
+
+## JSON HTTP API (`wallet_api/`)
+
+Session-scoped (token required on every request). Listen address and token shown at TUI startup. Session schema: `wallet-session-v1` in `wallet_api/state.rs`.
+
+```bash
+# Session state
+curl -sS '{base}/v1/wallet/state' \
+  -H '{auth}'
+
+# Show balance
+curl -sS '{base}/v1/wallet/command' \
+  -H '{auth}' \
+  -H 'Content-Type: application/json' \
+  -d '{"argv":["show"]}'
+
+# List notes
+curl -sS '{base}/v1/wallet/command' \
+  -H '{auth}' \
+  -H 'Content-Type: application/json' \
+  -d '{"argv":["list-notes"]}'
+
+# Health check
+curl -sS '{base}/health' \
+  -H '{auth}'
+```
+
+## Module map
+
+```
+src/
+├── lib.rs              Entry: nockchain_wallet_tui::run
+├── main.rs             Binary entry
+├── event_loop.rs       Terminal + async loop
+├── command_runner.rs   TuiRuntime + job scheduling
+├── view/               WalletEvent → display text
+├── wallet_api/         axum server, auth, executor
+├── create_tx.rs        Create-tx wizard UI state (not the planner)
+└── …                   handlers, components, store, session, nns
+```
+
+Planner and tx file snapshots live in `nockchain_wallet::create_tx`.
+
+## Adding a feature
+
+1. **Screen** — variant in `screens.rs` if needed.
+2. **Actions** — `UiAction` + `store/apply.rs`.
+3. **Handler** — `handlers/`.
+4. **Draw** — `components/`, wired from `components/root.rs`.
+5. **Wallet I/O** — `command_runner` + dispatch hooks.
+6. **Output** — extend `WalletEvent` in `nockchain-wallet` and render in `view/mod.rs`.
 
 ## Testing
 

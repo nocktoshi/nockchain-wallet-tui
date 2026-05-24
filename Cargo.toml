@@ -1,7 +1,7 @@
 [package]
 name = "nockchain-wallet-tui"
-version.workspace = true
-edition.workspace = true
+version = "0.1.0"
+edition = "2021"
 license = "MIT OR Apache-2.0"
 description = "Interactive terminal UI for nockchain-wallet"
 
@@ -14,26 +14,26 @@ name = "nockchain-wallet-tui"
 path = "src/main.rs"
 
 [dependencies]
-rustls = { workspace = true }
+rustls = "0.23.0"
 arboard = "3.3"
-axum = { workspace = true }
-bs58 = { workspace = true }
-clap = { workspace = true, features = ["derive", "cargo"] }
-crossterm.workspace = true
+axum = "0.8.1"
+bs58 = "0.5.1"
+clap = { version = "4.4.4", features = ["derive", "cargo"] }
+crossterm = "0.29"
 dotenvy = "0.15"
-getrandom.workspace = true
-hex.workspace = true
+getrandom = { version = "0.3.3", features = ["std"] }
+hex = "0.4"
 http = "1"
-nockapp = { workspace = true }
-nockapp-grpc = { workspace = true }
-nockchain-types = { workspace = true }
-nockchain-wallet = { git = "https://github.com/nocktoshi/nockchain", branch = "dev", path = "crates/nockchain-wallet" }
-ratatui.workspace = true
+nockapp = { git = "https://github.com/nocktoshi/nockchain", branch = "dev" }
+nockapp-grpc = { git = "https://github.com/nocktoshi/nockchain", branch = "dev" }
+nockchain-types = { git = "https://github.com/nocktoshi/nockchain", branch = "dev" }
+nockchain-wallet = { git = "https://github.com/nocktoshi/nockchain", branch = "dev" }
+ratatui = "0.29.0"
 regex = "1"
-reqwest = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
-tokio = { workspace = true, features = ["full"] }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
-wallet-tx-builder = { git = "https://github.com/nocktoshi/nockchain", branch = "dev", path = "crates/wallet-tx-builder" }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2", "charset", "json", "blocking"] }
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0.104"
+tokio = { version = "1.32", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "rt", "signal", "tracing"] }
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.18", features = ["ansi", "env-filter", "registry"] }
+wallet-tx-builder = { git = "https://github.com/nocktoshi/nockchain", branch = "dev" }
