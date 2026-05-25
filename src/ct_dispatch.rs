@@ -9,11 +9,10 @@ use super::command_runner::{schedule_wallet_command, JobCompletion, TuiRuntime};
 use super::create_tx::{CreateTxWizard, OptSub, Phase, RecSub};
 use super::screens::{TuiControl, Screen};
 use super::store::{UIStore, UiAction};
-use nockchain_wallet::command::{NoteSelectionStrategyCli, WalletCli};
+use nockchain_wallet::command::NoteSelectionStrategyCli;
 use nockchain_wallet::recipient::{validate_blob_field, validate_memo_utf8, RecipientSpecToken};
 
 pub(super) async fn handle_create_tx(
-    _cli: &WalletCli,
     store: &mut UIStore,
     key: KeyEvent,
     rt: &TuiRuntime,

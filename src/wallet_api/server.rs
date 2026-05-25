@@ -85,11 +85,15 @@ pub(crate) fn spawn_http_server(
                 session_path,
             };
             let auth_token = Arc::clone(&api_auth_token);
-            let app = Router::new()
-                .route("/health", get(health))
+            let protected = Router::new()
                 .route("/v1/wallet/state", get(get_session).post(post_session))
                 .route("/v1/wallet/command", post(run_command))
                 .route_layer(middleware::from_fn_with_state(auth_token, require_api_auth))
+                .with_state(state.clone());
+
+            let app = Router::new()
+                .route("/health", get(health))
+                .merge(protected)
                 .with_state(state);
 
             let listener = match tokio::net::TcpListener::bind(addr).await {

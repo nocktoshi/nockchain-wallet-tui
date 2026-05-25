@@ -6,7 +6,6 @@ use clap::Parser;
 use tokio::sync::mpsc;
 
 use super::{spawn_http_server, ApiServerHandle, TuiApiJob};
-use nockchain_wallet::command::WalletCli;
 use crate::command_runner::{self, TuiRuntime};
 use crate::session::current_api_listen;
 use nockchain_wallet::wallet_outcome::WalletCommandJsonResponse;
@@ -18,18 +17,18 @@ async fn execute_tui_api_command(
 ) -> WalletCommandJsonResponse {
     rt.wallet_event_sink.lock().unwrap().clear();
 
-    let mut args = vec!["nockchain-wallet".to_string()];
-    args.extend(argv);
+    // clap expects argv[0] to be the program name; provide a dummy.
+    let mut full_argv = vec!["nockchain-wallet-tui".to_string()];
+    full_argv.extend(argv);
 
-    let parsed = match WalletCli::try_parse_from(args) {
-        Ok(mut cli) => {
-            let session = rt.cli.lock().unwrap();
-            cli.boot = session.boot.clone();
-            cli.verbose = session.verbose;
-            cli.fakenet = session.fakenet;
-            cli.connection = session.connection.clone();
-            cli
-        }
+    #[derive(Parser)]
+    struct ApiCli {
+        #[command(subcommand)]
+        command: nockchain_wallet::command::Commands,
+    }
+
+    let command = match ApiCli::try_parse_from(full_argv) {
+        Ok(cli) => cli.command,
         Err(e) => {
             return WalletCommandJsonResponse {
                 schema_version: nockchain_wallet::wallet_outcome::WALLET_OUTCOME_SCHEMA,
@@ -39,10 +38,11 @@ async fn execute_tui_api_command(
         }
     };
 
-    let outcome =
-        command_runner::run_command_on_runtime(rt, &parsed, parsed.command.clone(), None, None)
-            .await;
-    WalletCommandJsonResponse::from_outcome(outcome)
+    eprintln!("[api] executing: {:?}", command);
+    let outcome = command_runner::run_command_on_runtime(rt, command, None, None).await;
+    let resp = WalletCommandJsonResponse::from_outcome(outcome);
+    eprintln!("[api] result: success={} error={:?}", resp.success.is_some(), resp.error);
+    resp
 }
 
 /// Start (or restart) the JSON API listener using session `api_listen`.
@@ -74,7 +74,9 @@ pub(crate) async fn run_api_job_loop(rt: TuiRuntime, mut job_rx: mpsc::Receiver<
     *rt.api_server.lock().unwrap() = server;
 
     while let Some(job) = job_rx.recv().await {
+        eprintln!("[api] job received: argv={:?}", job.argv);
         let resp = execute_tui_api_command(&rt, job.argv).await;
+        eprintln!("[api] result: success={} error={:?}", resp.success.is_some(), resp.error);
         let _ = job.resp.send(resp);
     }
 

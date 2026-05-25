@@ -10,7 +10,7 @@ Interactive full-screen terminal UI for [`nockchain-wallet`](../nockchain-wallet
 
 ```bash
 # Monorepo
-cargo run -p nockchain-wallet-tui
+KERNEL_JAM_PATH=~/nockchain/assets/wal.jam cargo +nightly run -p nockchain-wallet-tui
 
 # Installed binary (requires matching nockchain-wallet lib version)
 nockchain-wallet-tui

@@ -26,14 +26,12 @@ use super::hooks::terminal::{restore_terminal, Term};
 use super::screens::Screen;
 use super::store::{UIStore, UiAction};
 use crate::wallet_api::TuiApiJob;
-use nockchain_wallet::command::WalletCli;
 
 pub(crate) fn io_err(e: io::Error) -> NockAppError {
     NockAppError::OtherError(format!("terminal io: {e}"))
 }
 
 pub(super) async fn run(
-    cli: WalletCli,
     rt: TuiRuntime,
     api_job_rx: mpsc::Receiver<TuiApiJob>,
     price_done_tx: mpsc::UnboundedSender<Result<f64, String>>,
@@ -41,7 +39,6 @@ pub(super) async fn run(
 ) -> Result<(), NockAppError> {
     LocalSet::new()
         .run_until(run_inner(
-            cli,
             rt,
             api_job_rx,
             price_done_tx,
@@ -51,14 +48,13 @@ pub(super) async fn run(
 }
 
 async fn run_inner(
-    cli: WalletCli,
     rt: TuiRuntime,
     api_job_rx: mpsc::Receiver<TuiApiJob>,
     price_done_tx: mpsc::UnboundedSender<Result<f64, String>>,
     mut price_done_rx: mpsc::UnboundedReceiver<Result<f64, String>>,
 ) -> Result<(), NockAppError> {
     let rt_api = rt.clone();
-    tokio::task::spawn_local(async move {
+    let api_task = tokio::task::spawn_local(async move {
         super::wallet_api::run_api_job_loop(rt_api, api_job_rx).await;
     });
     stdout().execute(EnterAlternateScreen).map_err(io_err)?;
@@ -154,7 +150,6 @@ async fn run_inner(
                             continue;
                         }
                         match handlers::dispatch_key(
-                            &cli,
                             &rt,
                             &mut store,
                             key,
@@ -170,6 +165,10 @@ async fn run_inner(
                             Ok(super::screens::TuiControl::Continue) => {}
                             Ok(super::screens::TuiControl::Quit) => break Ok(()),
                             Err(e) => {
+                                if let Some(h) = rt.api_server.lock().unwrap().take() {
+                                    h.stop();
+                                }
+                                api_task.abort();
                                 let mut term_guard = terminal.lock().await;
                                 let _ = restore_terminal(&mut term_guard);
                                 break Err(e);
@@ -178,7 +177,7 @@ async fn run_inner(
                     }
                     Event::Paste(text) => {
                         match handlers::dispatch_paste(
-                            &cli,
+                            &rt.connection.lock().unwrap(),
                             &mut store,
                             text,
                             &rt,
@@ -190,6 +189,10 @@ async fn run_inner(
                             Ok(super::screens::TuiControl::Continue) => {}
                             Ok(super::screens::TuiControl::Quit) => break Ok(()),
                             Err(e) => {
+                                if let Some(h) = rt.api_server.lock().unwrap().take() {
+                                    h.stop();
+                                }
+                                api_task.abort();
                                 let mut term_guard = terminal.lock().await;
                                 let _ = restore_terminal(&mut term_guard);
                                 break Err(e);
@@ -201,6 +204,13 @@ async fn run_inner(
             }
         }
     };
+
+    // Hardened cleanup: always stop the background API server thread
+    // and abort the job-loop task, even on early exit or panic paths.
+    if let Some(h) = rt.api_server.lock().unwrap().take() {
+        h.stop();
+    }
+    api_task.abort();
 
     let mut term_guard = terminal.lock().await;
     let _ = restore_terminal(&mut term_guard);

@@ -6,12 +6,13 @@ use std::sync::{Arc, RwLock};
 use super::command_runner::TuiRuntime;
 use super::session_client;
 use nockchain_wallet::connection::GrpcEndpoint;
+
 use crate::wallet_api::{save_session_state, WalletSessionState};
 
 pub(crate) fn apply_session_to_cli(rt: &TuiRuntime) {
     let session = rt.session_config.read().unwrap();
     if let Ok(endpoint) = GrpcEndpoint::parse(session.public_grpc_server_addr.trim()) {
-        rt.cli.lock().unwrap().connection.public_grpc_server_addr = endpoint;
+        rt.connection.lock().unwrap().public_grpc_server_addr = endpoint;
     }
 }
 
@@ -55,7 +56,7 @@ pub(crate) fn session_config_snapshot(rt: &TuiRuntime) -> WalletSessionState {
 
 pub(crate) fn init_session_config(
     session_path: PathBuf,
-    cli: &nockchain_wallet::command::WalletCli,
+    connection: &nockchain_wallet::ConnectionCli,
 ) -> Arc<RwLock<WalletSessionState>> {
     let mut session =
         crate::wallet_api::load_session_state(&session_path).unwrap_or_else(|e| {
@@ -63,7 +64,7 @@ pub(crate) fn init_session_config(
             WalletSessionState::default()
         });
     if session.public_grpc_server_addr.is_empty() {
-        session = WalletSessionState::from_wallet_cli(cli);
+        session = WalletSessionState::from_connection(connection);
     }
     if let Err(e) = save_session_state(&session_path, &session) {
         tracing::warn!("writing initial session.json: {e}");

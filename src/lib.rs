@@ -32,23 +32,33 @@ pub(crate) use wallet_api::TuiApiJob;
 use wallet_api::{generate_api_token, SESSION_FILE_NAME};
 use wallet_tx_builder::adapter::NormalizedSnapshot;
 
-use nockchain_wallet::command::WalletCli;
+use nockchain_wallet::ConnectionCli;
+use nockapp::kernel::boot::Cli as BootCli;
 use nockchain_wallet::Wallet;
+
+/// Options the TUI binary needs. Decouples the TUI from the full WalletCli (which requires a Commands subcommand).
+#[derive(Clone, Debug)]
+pub struct TuiOptions {
+    pub boot: BootCli,
+    pub verbose: bool,
+    pub fakenet: bool,
+    pub connection: ConnectionCli,
+}
 
 pub(crate) fn normalize_slash_cmd(line: &str) -> &str {
     let t = line.trim();
     t.strip_prefix('/').unwrap_or(t).trim()
 }
 
-/// Main TUI entry: full-screen terminal UI.
-pub async fn run(
-    cli: &WalletCli,
+/// Main TUI entry using the decoupled options (preferred for the TUI binary).
+pub async fn run_with_options(
+    opts: TuiOptions,
     wallet: Wallet,
     synced_snapshot_for_planner: Option<NormalizedSnapshot>,
     wallet_data_dir: PathBuf,
 ) -> Result<(), NockAppError> {
     let session_path = wallet_data_dir.join(SESSION_FILE_NAME);
-    let session_config = init_session_config(session_path.clone(), cli);
+    let session_config = init_session_config(session_path.clone(), &opts.connection);
     let api_auth_token = Arc::from(generate_api_token());
     let wallet = Arc::new(Mutex::new(wallet));
     let snapshot = Arc::new(Mutex::new(synced_snapshot_for_planner));
@@ -57,7 +67,7 @@ pub async fn run(
     let rt = TuiRuntime {
         wallet: Arc::clone(&wallet),
         snapshot: Arc::clone(&snapshot),
-        cli: Arc::new(std::sync::Mutex::new(cli.clone())),
+        connection: Arc::new(std::sync::Mutex::new(opts.connection.clone())),
         wallet_event_sink: Arc::new(std::sync::Mutex::new(Vec::new())),
         tui_markdown_sink: Arc::new(std::sync::Mutex::new(String::new())),
         session_config,
@@ -67,8 +77,9 @@ pub async fn run(
         api_server: Arc::new(std::sync::Mutex::new(None)),
     };
     session::apply_session_to_cli(&rt);
-    event_loop::run(cli.clone(), rt, api_job_rx, price_done_tx, price_done_rx).await
+    event_loop::run(rt, api_job_rx, price_done_tx, price_done_rx).await
 }
+
 
 #[cfg(test)]
 mod tests {

@@ -1,10 +1,29 @@
 #![allow(clippy::unwrap_used)]
 
 use clap::Parser;
-use nockapp::kernel::boot::{self, NockStackSize};
+use nockapp::kernel::boot::{self, Cli, NockStackSize};
 use nockapp::NockAppError;
-use nockchain_wallet::command::WalletCli;
-use nockchain_wallet::open_wallet;
+use nockchain_wallet::boot_wallet;
+use nockchain_wallet::ConnectionCli;
+use nockchain_wallet_tui::TuiOptions;
+
+/// Lightweight CLI options struct for the TUI binary.
+/// Contains only what the TUI needs (no Commands subcommand).
+#[derive(Parser)]
+struct TuiCli {
+    #[command(flatten)]
+    boot: Cli,
+
+    /// More detailed logs (info/debug). When unset, the wallet TUI uses a quiet default unless `RUST_LOG` is set.
+    #[arg(short, long, global = true)]
+    verbose: bool,
+
+    #[arg(long, default_value = "false")]
+    fakenet: bool,
+
+    #[command(flatten)]
+    connection: ConnectionCli,
+}
 
 #[tokio::main]
 async fn main() -> Result<(), NockAppError> {
@@ -12,11 +31,11 @@ async fn main() -> Result<(), NockAppError> {
         .install_default()
         .expect("default provider already set elsewhere");
 
-    let mut cli = WalletCli::parse();
-    cli.boot.stack_size = NockStackSize::Tiny;
+    let mut tui = TuiCli::parse();
+    tui.boot.stack_size = NockStackSize::Tiny;
 
     if std::env::var("RUST_LOG").is_err() {
-        if cli.verbose {
+        if tui.verbose {
             std::env::set_var(
                 "RUST_LOG",
                 "info,nockapp=info,nockchain_wallet=info,nockchain_wallet_tui=info,opentelemetry_sdk=off",
@@ -29,8 +48,17 @@ async fn main() -> Result<(), NockAppError> {
         }
     }
 
-    boot::init_default_tracing(&cli.boot.clone());
+    boot::init_default_tracing(&tui.boot);
 
-    let (wallet, synced_snapshot, data_dir) = open_wallet(&cli).await?;
-    nockchain_wallet_tui::run(&cli, wallet, synced_snapshot, data_dir).await
+    let (wallet, synced_snapshot, data_dir) =
+        boot_wallet(tui.boot.clone(), tui.fakenet).await?;
+
+    let opts = TuiOptions {
+        boot: tui.boot,
+        verbose: tui.verbose,
+        fakenet: tui.fakenet,
+        connection: tui.connection,
+    };
+
+    nockchain_wallet_tui::run_with_options(opts, wallet, synced_snapshot, data_dir).await
 }

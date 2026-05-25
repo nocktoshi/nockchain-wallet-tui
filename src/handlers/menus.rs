@@ -8,7 +8,7 @@ use tokio::sync::{mpsc, Mutex};
 use tracing::warn;
 
 use super::input::{edit_line, esc_back, list_activate};
-use nockchain_wallet::command::{Commands, WalletCli};
+use nockchain_wallet::command::Commands;
 use crate::command_runner::{JobCompletion, TuiRuntime};
 use crate::components::menus::{
     BOOL, IMPORT_SRC, KEYS_MENU, NOTES_MENU, SETTINGS_MENU, SIGN_MENU, TX_MENU,
@@ -42,7 +42,6 @@ pub(super) fn navigate_main_menu_item(store: &mut UIStore, i: usize) {
 }
 
 pub(super) async fn handle_keys(
-    _cli: &WalletCli,
     store: &mut UIStore,
     key: KeyEvent,
     rt: &TuiRuntime,
@@ -205,7 +204,6 @@ pub(super) async fn handle_keys(
 }
 
 pub(super) async fn handle_keys_import(
-    _cli: &WalletCli,
     store: &mut UIStore,
     key: KeyEvent,
 ) -> Result<TuiControl, NockAppError> {
@@ -278,7 +276,6 @@ pub(super) async fn handle_keys_import(
 }
 
 pub(super) async fn handle_notes(
-    _cli: &WalletCli,
     store: &mut UIStore,
     key: KeyEvent,
     rt: &TuiRuntime,
@@ -361,7 +358,6 @@ pub(super) async fn handle_notes(
 }
 
 pub(super) async fn handle_transactions(
-    _cli: &WalletCli,
     store: &mut UIStore,
     key: KeyEvent,
 ) -> Result<TuiControl, NockAppError> {
@@ -456,7 +452,6 @@ pub(super) async fn handle_transactions(
 }
 
 pub(super) async fn handle_watch(
-    _cli: &WalletCli,
     store: &mut UIStore,
     key: KeyEvent,
 ) -> Result<TuiControl, NockAppError> {
@@ -529,7 +524,6 @@ pub(super) async fn handle_watch(
 }
 
 pub(super) async fn handle_sign(
-    _cli: &WalletCli,
     store: &mut UIStore,
     key: KeyEvent,
 ) -> Result<TuiControl, NockAppError> {
@@ -613,7 +607,6 @@ pub(super) async fn handle_sign(
 }
 
 pub(super) fn handle_settings(
-    cli: &WalletCli,
     store: &mut UIStore,
     key: KeyEvent,
     rt: &TuiRuntime,
@@ -662,7 +655,32 @@ pub(super) fn handle_settings(
                             );
                         }
                         2 => {
-                            const API_CURL_TEMPLATE: &str = include_str!("../docs/api-curl.txt");
+                            const API_CURL_TEMPLATE: &str = r#"Wallet JSON API — this TUI session only
+Listen: {listen}
+Token:  {token}
+
+Copy any block below (token is required on every request).
+
+── Session state ──
+curl -sS '{base}/v1/wallet/state' \
+  -H '{auth}'
+
+── Show balance ──
+curl -sS '{base}/v1/wallet/command' \
+  -H '{auth}' \
+  -H 'Content-Type: application/json' \
+  -d '{"argv":["show-balance"]}'
+
+── List notes ──
+curl -sS '{base}/v1/wallet/command' \
+  -H '{auth}' \
+  -H 'Content-Type: application/json' \
+  -d '{"argv":["list-notes"]}'
+
+── Health check ──
+curl -sS '{base}/health' \
+  -H '{auth}'
+"#;
                             let base = api_base_url(&current_api_listen(rt));
                             let token = rt.api_auth_token.as_ref();
                             let auth = format!("Authorization: Bearer {token}");
@@ -676,7 +694,7 @@ pub(super) fn handle_settings(
                             super::replace_screen(store, Screen::Settings { sel });
                         }
                         3 => {
-                            log_help(cli.verbose);
+                            log_help(false); // TODO: verbose moved to TuiOptions / runtime_cli if still needed
                         }
                         4 => {
                             log_verbose_info();
@@ -698,7 +716,6 @@ pub(super) fn handle_settings(
 }
 
 pub(super) fn handle_quick(
-    cli: &WalletCli,
     store: &mut UIStore,
     key: KeyEvent,
 ) -> Result<TuiControl, NockAppError> {
@@ -720,7 +737,7 @@ pub(super) fn handle_quick(
                     match cmd.to_ascii_lowercase().as_str() {
                         "exit" | "quit" => return Ok(TuiControl::Quit),
                         "help" => {
-                            log_help(cli.verbose);
+                            log_help(false); // TODO: verbose moved to TuiOptions / runtime_cli if still needed
                         }
                         "verbose" => {
                             log_verbose_info();

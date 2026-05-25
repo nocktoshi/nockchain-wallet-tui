@@ -3204,7 +3204,7 @@ dependencies = [
 [[package]]
 name = "ibig"
 version = "0.3.6"
-source = "git+https://github.com/nocktoshi/nockchain?branch=dev#d4d010e974df04e4df0e588c6c9cde5e5030b0e8"
+source = "git+https://github.com/nocktoshi/nockchain?branch=dev#1f94729f9b8badcae2fe8fdbfd183d356eac2610"
 dependencies = [
  "cfg-if",
  "num-traits",
@@ -3640,7 +3640,7 @@ dependencies = [
 [[package]]
 name = "kernels-open-wallet"
 version = "0.1.0"
-source = "git+https://github.com/nocktoshi/nockchain?branch=dev#d4d010e974df04e4df0e588c6c9cde5e5030b0e8"
+source = "git+https://github.com/nocktoshi/nockchain?branch=dev#1f94729f9b8badcae2fe8fdbfd183d356eac2610"
 
 [[package]]
 name = "konst"
@@ -3992,7 +3992,7 @@ dependencies = [
 [[package]]
 name = "murmur3"
 version = "0.5.2"
-source = "git+https://github.com/nocktoshi/nockchain?branch=dev#d4d010e974df04e4df0e588c6c9cde5e5030b0e8"
+source = "git+https://github.com/nocktoshi/nockchain?branch=dev#1f94729f9b8badcae2fe8fdbfd183d356eac2610"
 
 [[package]]
 name = "no-std-compat"
@@ -4003,7 +4003,7 @@ checksum = "b93853da6d84c2e3c7d730d6473e8817692dd89be387eb01b94d7f108ecb5b8c"
 [[package]]
 name = "nockapp"
 version = "0.1.0"
-source = "git+https://github.com/nocktoshi/nockchain?branch=dev#d4d010e974df04e4df0e588c6c9cde5e5030b0e8"
+source = "git+https://github.com/nocktoshi/nockchain?branch=dev#1f94729f9b8badcae2fe8fdbfd183d356eac2610"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4064,7 +4064,7 @@ dependencies = [
 [[package]]
 name = "nockapp-grpc"
 version = "0.1.0"
-source = "git+https://github.com/nocktoshi/nockchain?branch=dev#d4d010e974df04e4df0e588c6c9cde5e5030b0e8"
+source = "git+https://github.com/nocktoshi/nockchain?branch=dev#1f94729f9b8badcae2fe8fdbfd183d356eac2610"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4103,7 +4103,7 @@ dependencies = [
 [[package]]
 name = "nockapp-grpc-proto"
 version = "0.1.0"
-source = "git+https://github.com/nocktoshi/nockchain?branch=dev#d4d010e974df04e4df0e588c6c9cde5e5030b0e8"
+source = "git+https://github.com/nocktoshi/nockchain?branch=dev#1f94729f9b8badcae2fe8fdbfd183d356eac2610"
 dependencies = [
  "anyhow",
  "glob",
@@ -4123,7 +4123,7 @@ dependencies = [
 [[package]]
 name = "nockchain-math"
 version = "0.1.0"
-source = "git+https://github.com/nocktoshi/nockchain?branch=dev#d4d010e974df04e4df0e588c6c9cde5e5030b0e8"
+source = "git+https://github.com/nocktoshi/nockchain?branch=dev#1f94729f9b8badcae2fe8fdbfd183d356eac2610"
 dependencies = [
  "argon2",
  "arrayref",
@@ -4146,7 +4146,7 @@ dependencies = [
 [[package]]
 name = "nockchain-types"
 version = "0.1.0"
-source = "git+https://github.com/nocktoshi/nockchain?branch=dev#d4d010e974df04e4df0e588c6c9cde5e5030b0e8"
+source = "git+https://github.com/nocktoshi/nockchain?branch=dev#1f94729f9b8badcae2fe8fdbfd183d356eac2610"
 dependencies = [
  "alloy",
  "anyhow",
@@ -4169,7 +4169,7 @@ dependencies = [
 [[package]]
 name = "nockchain-wallet"
 version = "0.1.0"
-source = "git+https://github.com/nocktoshi/nockchain?branch=dev#d4d010e974df04e4df0e588c6c9cde5e5030b0e8"
+source = "git+https://github.com/nocktoshi/nockchain?branch=dev#1f94729f9b8badcae2fe8fdbfd183d356eac2610"
 dependencies = [
  "bs58",
  "clap",
@@ -4233,7 +4233,7 @@ dependencies = [
 [[package]]
 name = "nockvm"
 version = "0.1.0"
-source = "git+https://github.com/nocktoshi/nockchain?branch=dev#d4d010e974df04e4df0e588c6c9cde5e5030b0e8"
+source = "git+https://github.com/nocktoshi/nockchain?branch=dev#1f94729f9b8badcae2fe8fdbfd183d356eac2610"
 dependencies = [
  "autotools",
  "bincode",
@@ -4264,7 +4264,7 @@ dependencies = [
 [[package]]
 name = "nockvm_crypto"
 version = "0.1.0"
-source = "git+https://github.com/nocktoshi/nockchain?branch=dev#d4d010e974df04e4df0e588c6c9cde5e5030b0e8"
+source = "git+https://github.com/nocktoshi/nockchain?branch=dev#1f94729f9b8badcae2fe8fdbfd183d356eac2610"
 dependencies = [
  "aes",
  "aes-siv",
@@ -4279,7 +4279,7 @@ dependencies = [
 [[package]]
 name = "nockvm_macros"
 version = "0.1.0"
-source = "git+https://github.com/nocktoshi/nockchain?branch=dev#d4d010e974df04e4df0e588c6c9cde5e5030b0e8"
+source = "git+https://github.com/nocktoshi/nockchain?branch=dev#1f94729f9b8badcae2fe8fdbfd183d356eac2610"
 dependencies = [
  "quote",
  "syn 2.0.117",
@@ -4322,7 +4322,7 @@ dependencies = [
 [[package]]
 name = "noun-serde"
 version = "0.1.0"
-source = "git+https://github.com/nocktoshi/nockchain?branch=dev#d4d010e974df04e4df0e588c6c9cde5e5030b0e8"
+source = "git+https://github.com/nocktoshi/nockchain?branch=dev#1f94729f9b8badcae2fe8fdbfd183d356eac2610"
 dependencies = [
  "bytes",
  "ibig",
@@ -4335,7 +4335,7 @@ dependencies = [
 [[package]]
 name = "noun-serde-derive"
 version = "0.1.0"
-source = "git+https://github.com/nocktoshi/nockchain?branch=dev#d4d010e974df04e4df0e588c6c9cde5e5030b0e8"
+source = "git+https://github.com/nocktoshi/nockchain?branch=dev#1f94729f9b8badcae2fe8fdbfd183d356eac2610"
 dependencies = [
  "nockvm",
  "proc-macro2",
@@ -7266,7 +7266,7 @@ dependencies = [
 [[package]]
 name = "wallet-tx-builder"
 version = "0.1.0"
-source = "git+https://github.com/nocktoshi/nockchain?branch=dev#d4d010e974df04e4df0e588c6c9cde5e5030b0e8"
+source = "git+https://github.com/nocktoshi/nockchain?branch=dev#1f94729f9b8badcae2fe8fdbfd183d356eac2610"
 dependencies = [
  "bytes",
  "nockapp",
@@ -8187,7 +8187,7 @@ dependencies = [
 [[package]]
 name = "zkvm-jetpack"
 version = "0.1.0"
-source = "git+https://github.com/nocktoshi/nockchain?branch=dev#d4d010e974df04e4df0e588c6c9cde5e5030b0e8"
+source = "git+https://github.com/nocktoshi/nockchain?branch=dev#1f94729f9b8badcae2fe8fdbfd183d356eac2610"
 dependencies = [
  "argon2",
  "bitvec",

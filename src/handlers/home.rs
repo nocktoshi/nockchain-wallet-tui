@@ -5,7 +5,7 @@ use nockapp::NockAppError;
 
 use super::input::{esc_back, list_activate};
 use super::{replace_screen, schedule_cmd};
-use nockchain_wallet::command::{Commands, WalletCli};
+use nockchain_wallet::command::Commands;
 use crate::command_runner::TuiRuntime;
 use crate::components::home::cta_key_to_index;
 use crate::components::menus::MAIN_MENU;
@@ -14,7 +14,6 @@ use crate::store::{UIStore, UiAction};
 use tokio::sync::mpsc;
 
 pub(super) async fn handle_home(
-    _cli: &WalletCli,
     store: &mut UIStore,
     key: KeyEvent,
     rt: &TuiRuntime,

@@ -4,7 +4,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use nockchain_wallet::command::WalletCli;
+
 use nockchain_wallet::connection::GrpcEndpoint;
 
 pub const WALLET_SESSION_SCHEMA: &str = "wallet-session-v1";
@@ -44,10 +44,10 @@ impl Default for WalletSessionState {
 }
 
 impl WalletSessionState {
-    pub fn from_wallet_cli(cli: &WalletCli) -> Self {
+    pub fn from_connection(connection: &nockchain_wallet::ConnectionCli) -> Self {
         Self {
             schema_version: WALLET_SESSION_SCHEMA.to_string(),
-            public_grpc_server_addr: cli.connection.public_grpc_server_addr.to_string(),
+            public_grpc_server_addr: connection.public_grpc_server_addr.to_string(),
             api_listen: DEFAULT_API_LISTEN.to_string(),
         }
     }

@@ -55,7 +55,6 @@ pub(super) fn replace_screen(store: &mut UIStore, screen: Screen) {
 }
 
 pub(super) async fn dispatch_key(
-    cli: &nockchain_wallet::command::WalletCli,
     rt: &TuiRuntime,
     store: &mut UIStore,
     key: KeyEvent,
@@ -103,7 +102,7 @@ pub(super) async fn dispatch_key(
     match &mut store.state.screen {
         Screen::Splash => Ok(TuiControl::Continue),
         Screen::Home => {
-            home::handle_home(cli, store, key, rt, done_tx, balance_done_tx, price_done_tx).await
+            home::handle_home(store, key, rt, done_tx, balance_done_tx, price_done_tx).await
         }
         Screen::Receive { .. } => receive::handle_receive(store, key).await,
         Screen::NnsBuy { .. } => {
@@ -112,26 +111,26 @@ pub(super) async fn dispatch_key(
         Screen::SendSimple { .. } => {
             send_simple::handle_send_simple(store, key, rt, done_tx, plan_done_tx).await
         }
-        Screen::Keys { .. } => menus::handle_keys(cli, store, key, rt, terminal, done_tx).await,
-        Screen::KeysImport { .. } => menus::handle_keys_import(cli, store, key).await,
-        Screen::Notes { .. } => menus::handle_notes(cli, store, key, rt, terminal, done_tx).await,
-        Screen::Transactions { .. } => menus::handle_transactions(cli, store, key).await,
-        Screen::Watch { .. } => menus::handle_watch(cli, store, key).await,
-        Screen::SignVerify { .. } => menus::handle_sign(cli, store, key).await,
-        Screen::Settings { .. } => menus::handle_settings(cli, store, key, rt),
-        Screen::Quick { .. } => menus::handle_quick(cli, store, key),
+        Screen::Keys { .. } => menus::handle_keys(store, key, rt, terminal, done_tx).await,
+        Screen::KeysImport { .. } => menus::handle_keys_import(store, key).await,
+        Screen::Notes { .. } => menus::handle_notes(store, key, rt, terminal, done_tx).await,
+        Screen::Transactions { .. } => menus::handle_transactions(store, key).await,
+        Screen::Watch { .. } => menus::handle_watch(store, key).await,
+        Screen::SignVerify { .. } => menus::handle_sign(store, key).await,
+        Screen::Settings { .. } => menus::handle_settings(store, key, rt),
+        Screen::Quick { .. } => menus::handle_quick(store, key),
         Screen::TextPrompt { .. } => {
-            prompts::text_prompt(cli, store, key, rt, terminal, done_tx).await
+            prompts::text_prompt(store, key, rt, terminal, done_tx).await
         }
         Screen::Confirm { .. } => {
-            prompts::confirm_prompt(cli, store, key, rt, terminal, done_tx).await
+            prompts::confirm_prompt(store, key, rt, terminal, done_tx).await
         }
         Screen::CreateTx { .. } => {
-            ct_dispatch::handle_create_tx(cli, store, key, rt, done_tx).await
+            ct_dispatch::handle_create_tx(store, key, rt, done_tx).await
         }
         Screen::ExitConfirm { .. } => menus::handle_exit_confirm(store, key),
         Screen::ErrorScreen { .. } => {
-            error::error_screen(cli, store, key, rt, terminal, done_tx).await
+            error::error_screen(store, key, rt, terminal, done_tx).await
         }
         Screen::Running { .. } => Ok(TuiControl::Continue),
     }
@@ -139,7 +138,7 @@ pub(super) async fn dispatch_key(
 
 /// Insert bracketed-paste clipboard text into the focused field.
 pub(super) async fn dispatch_paste(
-    _cli: &nockchain_wallet::command::WalletCli,
+    _connection: &nockchain_wallet::ConnectionCli,
     store: &mut UIStore,
     pasted: String,
     rt: &TuiRuntime,

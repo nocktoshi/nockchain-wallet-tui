@@ -30,7 +30,7 @@ pub(crate) fn new_screen() -> Screen {
 /// Plan the transaction (no kernel poke) and return markdown for the review panel.
 pub(crate) async fn plan_send_preview(
     wallet: &mut Wallet,
-    synced_snapshot: Option<wallet_tx_builder::adapter::NormalizedSnapshot>,
+    synced_snapshot: Option<nockchain_wallet::NormalizedSnapshot>,
     cmd: &Commands,
 ) -> Result<String, NockAppError> {
     let Commands::CreateTx {

@@ -8,7 +8,7 @@ use tokio::sync::{mpsc, Mutex};
 use tracing::warn;
 
 use super::input::{edit_line, esc_back, list_activate};
-use nockchain_wallet::command::{Commands, WalletCli, WatchSubcommand};
+use nockchain_wallet::command::{Commands, WatchSubcommand};
 use crate::command_runner::{JobCompletion, TuiRuntime};
 use crate::components::menus::BOOL;
 use crate::hooks::terminal::Term;
@@ -20,7 +20,6 @@ use crate::store::UIStore;
 use crate::{session, wallet_api};
 
 pub(super) async fn text_prompt(
-    _cli: &WalletCli,
     store: &mut UIStore,
     key: KeyEvent,
     rt: &TuiRuntime,
@@ -503,7 +502,6 @@ pub(super) async fn text_prompt(
 }
 
 pub(super) async fn confirm_prompt(
-    _cli: &WalletCli,
     store: &mut UIStore,
     key: KeyEvent,
     rt: &TuiRuntime,

@@ -7,7 +7,7 @@ use nockapp::NockAppError;
 use tokio::sync::{mpsc, Mutex};
 
 use super::input::{esc_back, list_activate};
-use nockchain_wallet::command::{Commands, WalletCli};
+use nockchain_wallet::command::Commands;
 use crate::command_runner::{JobCompletion, TuiRuntime};
 use crate::create_tx::CreateTxWizard;
 use crate::hooks::terminal::Term;
@@ -15,7 +15,6 @@ use crate::screens::{ErrorCtx, TuiControl, Screen};
 use crate::store::UIStore;
 
 pub(super) async fn error_screen(
-    _cli: &WalletCli,
     store: &mut UIStore,
     key: KeyEvent,
     rt: &TuiRuntime,

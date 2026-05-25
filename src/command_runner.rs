@@ -7,16 +7,16 @@ use std::time::Duration;
 
 use nockapp::NockAppError;
 use tokio::sync::{mpsc, watch, Mutex};
-use wallet_tx_builder::adapter::NormalizedSnapshot;
 
 use super::screens::Screen;
 use super::store::{UIStore, UiAction};
-use nockchain_wallet::command::{Commands, WalletCli};
-use nockchain_wallet::WrittenTxSnapshot;
-use nockchain_wallet::dispatch::{execute_wallet_command, DispatchHooks};
-use crate::wallet_api::{TuiApiJob, WalletSessionState};
+use nockchain_wallet::command::Commands;
+use nockchain_wallet::dispatch::execute_wallet_command;
 use nockchain_wallet::wallet_outcome::{WalletCommandData, WalletEvent};
-use nockchain_wallet::Wallet;
+use nockchain_wallet::WrittenTxSnapshot;
+use nockchain_wallet::{ConnectionCli, DispatchHooks, NormalizedSnapshot, Wallet};
+use crate::wallet_api::{TuiApiJob, WalletSessionState};
+
 
 const TX_DIR: &str = "txs";
 
@@ -60,8 +60,8 @@ pub(crate) type HomeIdentityCompletion = (Option<String>, Option<String>);
 pub(crate) struct TuiRuntime {
     pub wallet: Arc<Mutex<Wallet>>,
     pub snapshot: Arc<Mutex<Option<NormalizedSnapshot>>>,
-    /// Session CLI (connection may be updated from Settings).
-    pub cli: Arc<std::sync::Mutex<WalletCli>>,
+    /// Session connection config.
+    pub connection: Arc<std::sync::Mutex<ConnectionCli>>,
     /// Structured kernel/API events from `[%raw …]` effects.
     pub wallet_event_sink: Arc<std::sync::Mutex<Vec<WalletEvent>>>,
     /// Captured kernel `%markdown` (create-tx, send-tx, …) for TUI formatters.
@@ -80,7 +80,6 @@ pub(crate) struct TuiRuntime {
 /// Run a wallet command on the shared TUI runtime (TUI jobs and JSON API).
 pub(crate) async fn run_command_on_runtime(
     rt: &TuiRuntime,
-    cli: &WalletCli,
     command: Commands,
     sync_attempt: Option<watch::Sender<(usize, usize)>>,
     tx_snapshot_before: Option<WrittenTxSnapshot>,
@@ -97,7 +96,7 @@ pub(crate) async fn run_command_on_runtime(
     let outcome = {
         let mut w = rt.wallet.lock().await;
         let mut s = rt.snapshot.lock().await;
-        execute_wallet_command(cli, &mut *w, &command, &mut *s, false, hooks).await
+        execute_wallet_command(&rt.connection.lock().unwrap(), &mut *w, &command, &mut *s, false, hooks).await
     };
     match finalize_outcome(outcome, &rt.wallet_event_sink).await {
         Ok(mut data) => {
@@ -153,9 +152,8 @@ pub(crate) fn schedule_wallet_command(
 
     let rt = rt.clone();
     tokio::task::spawn_local(async move {
-        let cli = rt.cli.lock().unwrap().clone();
         let outcome =
-            run_command_on_runtime(&rt, &cli, cmd_clone, Some(progress_tx), None).await;
+            run_command_on_runtime(&rt, cmd_clone, Some(progress_tx), None).await;
         let events = outcome
             .as_ref()
             .map(|d| d.events.clone())
@@ -183,14 +181,12 @@ pub(crate) fn schedule_balance_sidebar_refresh(
     store.dispatch(UiAction::BeginBalanceSidebarFetch { progress_rx });
 
     let nonce = store.state.balance_job_nonce;
-
     let rt = rt.clone();
+
     let tx = done_tx.clone();
     tokio::task::spawn_local(async move {
-        let cli = rt.cli.lock().unwrap().clone();
         let outcome = run_command_on_runtime(
             &rt,
-            &cli,
             Commands::ShowBalance,
             Some(progress_tx),
             None,
@@ -257,10 +253,8 @@ pub(crate) fn schedule_home_identity_fetch(
     let rt = rt.clone();
     let tx = done_tx.clone();
     tokio::task::spawn_local(async move {
-        let cli = rt.cli.lock().unwrap().clone();
         let outcome = run_command_on_runtime(
             &rt,
-            &cli,
             Commands::ListActiveAddresses,
             None,
             None,
@@ -370,7 +364,6 @@ pub(crate) fn schedule_create_and_send(
 
     let rt = rt.clone();
     tokio::task::spawn_local(async move {
-        let cli = rt.cli.lock().unwrap().clone();
         let before = match Wallet::snapshot_written_txs(Path::new(TX_DIR)).await {
             Ok(s) => s,
             Err(e) => {
@@ -381,7 +374,6 @@ pub(crate) fn schedule_create_and_send(
 
         let create_outcome = run_command_on_runtime(
             &rt,
-            &cli,
             create_cmd,
             Some(progress_tx),
             Some(before.clone()),
@@ -417,14 +409,7 @@ pub(crate) fn schedule_create_and_send(
         for path in tx_paths {
             let send_outcome = run_command_on_runtime(
                 &rt,
-                &cli,
-                Commands::SendTx {
-                    transaction: path.clone(),
-                },
-                None,
-                None,
-            )
-            .await;
+                Commands::SendTx { transaction: path.clone() }, None, None).await;
             match send_outcome {
                 Ok(data) => events.extend(data.events),
                 Err(e) => {
