@@ -52,9 +52,26 @@ jobs:
       - name: Cargo cache
         uses: Swatinem/rust-cache@v2
 
+      - name: Download latest wallet kernel
+        run: |
+          set -euo pipefail
+          ASSET_URL=$(curl -sL \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/nockchain/nockchain/releases/latest \
+            | jq -r '.assets[] | select(.name == "nockchain-wallet-x86_64-unknown-linux-gnu.tar.gz") | .browser_download_url')
+          curl -sL "$ASSET_URL" -o /tmp/nockchain-wallet.tar.gz
+          mkdir -p /tmp/kernel
+          tar -xzf /tmp/nockchain-wallet.tar.gz -C /tmp/kernel
+          JAM_PATH=$(find /tmp/kernel -name '*.jam' | head -n1)
+          if [ -z "$JAM_PATH" ]; then
+            echo "No .jam file found in wallet tarball" >&2
+            exit 1
+          fi
+          cp "$JAM_PATH" /tmp/wal.jam
+          echo "KERNEL_JAM_PATH=/tmp/wal.jam" >> "$GITHUB_ENV"
+          echo "Using kernel: $JAM_PATH"
+
       - name: Build
-        env:
-          KERNEL_JAM_PATH: ${{ secrets.KERNEL_JAM_PATH }}
         run: cargo +nightly build --verbose
 
   test:
@@ -75,7 +92,24 @@ jobs:
       - name: Cargo cache
         uses: Swatinem/rust-cache@v2
 
+      - name: Download latest wallet kernel
+        run: |
+          set -euo pipefail
+          ASSET_URL=$(curl -sL \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/nockchain/nockchain/releases/latest \
+            | jq -r '.assets[] | select(.name == "nockchain-wallet-x86_64-unknown-linux-gnu.tar.gz") | .browser_download_url')
+          curl -sL "$ASSET_URL" -o /tmp/nockchain-wallet.tar.gz
+          mkdir -p /tmp/kernel
+          tar -xzf /tmp/nockchain-wallet.tar.gz -C /tmp/kernel
+          JAM_PATH=$(find /tmp/kernel -name '*.jam' | head -n1)
+          if [ -z "$JAM_PATH" ]; then
+            echo "No .jam file found in wallet tarball" >&2
+            exit 1
+          fi
+          cp "$JAM_PATH" /tmp/wal.jam
+          echo "KERNEL_JAM_PATH=/tmp/wal.jam" >> "$GITHUB_ENV"
+          echo "Using kernel: $JAM_PATH"
+
       - name: Test
-        env:
-          KERNEL_JAM_PATH: ${{ secrets.KERNEL_JAM_PATH }}
         run: cargo +nightly test --verbose
