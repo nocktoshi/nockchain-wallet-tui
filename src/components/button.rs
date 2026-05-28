@@ -173,7 +173,9 @@ fn sample_rgb_anchors(anchors: &[(u8, u8, u8)], u: f32) -> Color {
 const TOP_HIGHLIGHT: f32 = 0.125;
 
 fn lerp_channel(a: u8, b: u8, t: f32) -> u8 {
-    (a as f32 + (b as f32 - a as f32) * t).round().clamp(0.0, 255.0) as u8
+    (a as f32 + (b as f32 - a as f32) * t)
+        .round()
+        .clamp(0.0, 255.0) as u8
 }
 
 fn lerp_color(a: Color, b: Color, t: f32) -> Color {
@@ -213,7 +215,10 @@ pub(crate) fn balance_gradient_bg(local_y: usize, height: usize) -> Color {
     if t <= TOP_HIGHLIGHT {
         sample_palette(BALANCE_GRADIENT_TOP, t / TOP_HIGHLIGHT)
     } else {
-        sample_rgb_anchors(LOWER_GRADIENT_ANCHORS, (t - TOP_HIGHLIGHT) / (1.0 - TOP_HIGHLIGHT))
+        sample_rgb_anchors(
+            LOWER_GRADIENT_ANCHORS,
+            (t - TOP_HIGHLIGHT) / (1.0 - TOP_HIGHLIGHT),
+        )
     }
 }
 

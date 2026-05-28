@@ -23,17 +23,14 @@ const BALANCE_TOP_MARGIN: u16 = 2;
 const BALANCE_IDENTITY_ROWS: u16 = 2;
 const BALANCE_IDENTITY_PAD: u16 = 4;
 const BALANCE_BODY_ROWS: u16 = 5;
-const BALANCE_BUTTON_HEIGHT: u16 = BALANCE_IDENTITY_ROWS + BALANCE_IDENTITY_PAD + BALANCE_BODY_ROWS + 2;
+const BALANCE_BUTTON_HEIGHT: u16 =
+    BALANCE_IDENTITY_ROWS + BALANCE_IDENTITY_PAD + BALANCE_BODY_ROWS + 2;
 /// Cap width so the hero does not stretch edge-to-edge on wide terminals.
 const BALANCE_BUTTON_MAX_WIDTH: u16 = 52;
 /// Muted address line under a resolved `.nock` name.
 const BALANCE_ADDRESS_SUBTEXT: Color = Color::Rgb(180, 220, 180);
 
-const CTAS: &[(&str, char)] = &[
-    ("Send", 's'),
-    ("Receive", 'r'),
-    (".nock Name", 'n'),
-];
+const CTAS: &[(&str, char)] = &[("Send", 's'), ("Receive", 'r'), (".nock Name", 'n')];
 
 /// Mathematical sans-serif bold — reads much larger than normal terminal text.
 pub(crate) fn large_label(text: &str) -> String {
@@ -173,7 +170,10 @@ fn truncate_display(s: &str, max_cols: usize) -> String {
     let keep = (max_cols - 1) / 2;
     let chars: Vec<char> = s.chars().collect();
     let head: String = chars.iter().take(keep).collect();
-    let tail: String = chars.iter().skip(chars.len().saturating_sub(keep)).collect();
+    let tail: String = chars
+        .iter()
+        .skip(chars.len().saturating_sub(keep))
+        .collect();
     format!("{head}…{tail}")
 }
 

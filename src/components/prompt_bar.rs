@@ -37,12 +37,10 @@ pub(crate) fn draw_prompt_bar(f: &mut Frame<'_>, app: &AppState, area: Rect) {
 
     match &app.screen {
         Screen::TextPrompt { title, value, .. } => draw_text_prompt(f, inner, title, value),
-        Screen::Confirm { title, sel, labels, .. } => {
-            draw_confirm_prompt(f, inner, title, labels, *sel)
-        }
-        Screen::ExitConfirm { sel, .. } => {
-            draw_confirm_prompt(f, inner, "Exit TUI?", BOOL, *sel)
-        }
+        Screen::Confirm {
+            title, sel, labels, ..
+        } => draw_confirm_prompt(f, inner, title, labels, *sel),
+        Screen::ExitConfirm { sel, .. } => draw_confirm_prompt(f, inner, "Exit TUI?", BOOL, *sel),
         _ => {}
     }
 }
@@ -56,7 +54,10 @@ fn draw_text_prompt(f: &mut Frame<'_>, area: Rect, title: &str, value: &str) {
                 .fg(Color::White)
                 .add_modifier(Modifier::BOLD),
         )]),
-        Line::from(vec![Span::styled(input, Style::default().fg(THEME_ACCENT_GREEN))]),
+        Line::from(vec![Span::styled(
+            input,
+            Style::default().fg(THEME_ACCENT_GREEN),
+        )]),
     ];
     f.render_widget(
         Paragraph::new(lines)
@@ -66,13 +67,7 @@ fn draw_text_prompt(f: &mut Frame<'_>, area: Rect, title: &str, value: &str) {
     );
 }
 
-fn draw_confirm_prompt(
-    f: &mut Frame<'_>,
-    area: Rect,
-    title: &str,
-    labels: &[&str],
-    sel: usize,
-) {
+fn draw_confirm_prompt(f: &mut Frame<'_>, area: Rect, title: &str, labels: &[&str], sel: usize) {
     let mut option_spans: Vec<Span> = Vec::new();
     for (i, label) in labels.iter().enumerate() {
         if i > 0 {

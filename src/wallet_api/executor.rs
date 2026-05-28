@@ -11,10 +11,7 @@ use crate::session::current_api_listen;
 use nockchain_wallet::wallet_outcome::WalletCommandJsonResponse;
 
 /// Run a wallet command from the TUI JSON API (`argv` tokens, no binary name).
-async fn execute_tui_api_command(
-    rt: &TuiRuntime,
-    argv: Vec<String>,
-) -> WalletCommandJsonResponse {
+async fn execute_tui_api_command(rt: &TuiRuntime, argv: Vec<String>) -> WalletCommandJsonResponse {
     rt.wallet_event_sink.lock().unwrap().clear();
 
     // clap expects argv[0] to be the program name; provide a dummy.
@@ -41,7 +38,11 @@ async fn execute_tui_api_command(
     eprintln!("[api] executing: {:?}", command);
     let outcome = command_runner::run_command_on_runtime(rt, command, None, None).await;
     let resp = WalletCommandJsonResponse::from_outcome(outcome);
-    eprintln!("[api] result: success={} error={:?}", resp.success.is_some(), resp.error);
+    eprintln!(
+        "[api] result: success={} error={:?}",
+        resp.success.is_some(),
+        resp.error
+    );
     resp
 }
 
@@ -76,7 +77,11 @@ pub(crate) async fn run_api_job_loop(rt: TuiRuntime, mut job_rx: mpsc::Receiver<
     while let Some(job) = job_rx.recv().await {
         eprintln!("[api] job received: argv={:?}", job.argv);
         let resp = execute_tui_api_command(&rt, job.argv).await;
-        eprintln!("[api] result: success={} error={:?}", resp.success.is_some(), resp.error);
+        eprintln!(
+            "[api] result: success={} error={:?}",
+            resp.success.is_some(),
+            resp.error
+        );
         let _ = job.resp.send(resp);
     }
 

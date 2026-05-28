@@ -1,9 +1,9 @@
 //! Ratatui widgets and layout for the wallet TUI (presentation only).
 
 pub mod ambient;
-pub mod button;
 pub mod balance_sidebar;
 pub mod block_wordmark;
+pub mod button;
 pub mod create_tx_panel;
 pub mod home;
 pub mod home_tabs;

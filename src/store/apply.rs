@@ -99,6 +99,17 @@ pub(crate) fn apply_ui_action(state: &mut UiState, action: UiAction) {
             }
             state.balance_panel.nockname = nockname;
         }
+        UiAction::NnsOwnedNamesLoaded { names } => {
+            if let Screen::NnsBuy {
+                owned_names,
+                owned_names_loading,
+                ..
+            } = &mut state.screen
+            {
+                *owned_names = names;
+                *owned_names_loading = false;
+            }
+        }
         UiAction::NudgeOutputScroll { delta } => {
             if delta >= 0 {
                 state.output_scroll = state.output_scroll.saturating_add(delta as u16);

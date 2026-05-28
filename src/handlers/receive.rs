@@ -6,7 +6,7 @@ use nockapp::NockAppError;
 use super::input::esc_back;
 use super::replace_screen;
 use crate::clipboard;
-use crate::screens::{TuiControl, Screen};
+use crate::screens::{Screen, TuiControl};
 use crate::store::{UIStore, UiAction};
 
 pub(super) async fn handle_receive(

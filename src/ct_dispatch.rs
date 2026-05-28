@@ -7,7 +7,7 @@ use tokio::sync::mpsc;
 
 use super::command_runner::{schedule_wallet_command, JobCompletion, TuiRuntime};
 use super::create_tx::{CreateTxWizard, OptSub, Phase, RecSub};
-use super::screens::{TuiControl, Screen};
+use super::screens::{Screen, TuiControl};
 use super::store::{UIStore, UiAction};
 use nockchain_wallet::command::NoteSelectionStrategyCli;
 use nockchain_wallet::recipient::{validate_blob_field, validate_memo_utf8, RecipientSpecToken};
@@ -176,8 +176,18 @@ pub(super) async fn handle_create_tx(
                 edit_line(line, key);
                 if key.code == KeyCode::Enter {
                     advance_options_line(
-                        &mut w.status, names, fee, *allow_low_fee, refund_pkh, index, *hardened,
-                        *include_data, sign_keys, *save_raw_tx, *note_selection_strategy, sub,
+                        &mut w.status,
+                        names,
+                        fee,
+                        *allow_low_fee,
+                        refund_pkh,
+                        index,
+                        *hardened,
+                        *include_data,
+                        sign_keys,
+                        *save_raw_tx,
+                        *note_selection_strategy,
+                        sub,
                     );
                 }
             }
@@ -189,8 +199,15 @@ pub(super) async fn handle_create_tx(
                 KeyCode::Down | KeyCode::Char('j') => *sel = (*sel + 1).min(1),
                 KeyCode::Enter => {
                     advance_options_toggle(
-                        &mut w.status, allow_low_fee, refund_pkh, hardened, include_data,
-                        save_raw_tx, note_selection_strategy, sign_keys, sub,
+                        &mut w.status,
+                        allow_low_fee,
+                        refund_pkh,
+                        hardened,
+                        include_data,
+                        save_raw_tx,
+                        note_selection_strategy,
+                        sign_keys,
+                        sub,
                     );
                 }
                 _ => {}

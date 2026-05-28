@@ -33,12 +33,20 @@ pub(crate) fn draw_splash(f: &mut Frame<'_>, _tick: u64) {
 
     let v = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(22), Constraint::Length(12), Constraint::Min(2)])
+        .constraints([
+            Constraint::Percentage(22),
+            Constraint::Length(12),
+            Constraint::Min(2),
+        ])
         .split(inner);
 
     let mid = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Fill(1), Constraint::Length(LOGO_W + 6), Constraint::Fill(1)])
+        .constraints([
+            Constraint::Fill(1),
+            Constraint::Length(LOGO_W + 6),
+            Constraint::Fill(1),
+        ])
         .flex(Flex::Center)
         .split(v[1]);
 

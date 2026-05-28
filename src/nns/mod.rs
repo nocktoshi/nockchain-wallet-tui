@@ -5,15 +5,16 @@ use std::time::Duration;
 use reqwest::Client;
 use serde::Deserialize;
 
-use nockchain_wallet::recipient::RecipientSpecToken;
 use crate::components::price::format_usd_total;
 use crate::format::format_nock_from_nicks;
+use nockchain_wallet::recipient::RecipientSpecToken;
 
 /// NNS registry payee from [nockchain#116](https://github.com/nockchain/nockchain/pull/116).
 pub(crate) const REGISTRY_P2PKH: &str = "8s29XUK8Do7QWt2MHfPdd1gDSta6db4c3bQrxP1YdJNfXpL3WPzTT5";
 
 const NOCKNAMES_SEARCH_URL: &str = "https://api.nocknames.com/search";
 const NOCKNAMES_RESOLVE_URL: &str = "https://api.nocknames.com/resolve";
+const NOCKNAMES_VERIFIED_URL: &str = "https://api.nocknames.com/verified";
 const NICKS_PER_NOCK: u64 = 65_536;
 
 #[derive(Debug, Deserialize)]
@@ -115,12 +116,10 @@ pub(crate) struct NnsLookupOk {
 /// User-facing availability line for the NNS buy screen.
 pub(crate) fn availability_message(ok: &NnsLookupOk, usd_per_nock: Option<f64>) -> String {
     let fee = format_nock_amount_with_usd(ok.fee_nicks as u128, usd_per_nock);
-    let listed = ok.listed_nocks.map(|n| {
-        format!(
-            " · listed {}",
-            format_nocks_with_usd(n, usd_per_nock)
-        )
-    }).unwrap_or_default();
+    let listed = ok
+        .listed_nocks
+        .map(|n| format!(" · listed {}", format_nocks_with_usd(n, usd_per_nock)))
+        .unwrap_or_default();
     format!(
         "`{}` is available — registration fee {fee}{listed}",
         ok.canonical_name
@@ -173,6 +172,44 @@ pub(crate) async fn resolve_primary_name(address: &str) -> Result<Option<String>
     } else {
         Ok(Some(name.to_string()))
     }
+}
+
+#[derive(Debug, Deserialize)]
+struct VerifiedNameEntry {
+    name: String,
+}
+
+/// Query the registry for all verified `.nock` names owned by the given address
+/// (`GET /verified?address=...`).
+pub(crate) async fn list_verified_names(address: &str) -> Result<Vec<String>, String> {
+    let address = address.trim();
+    if address.is_empty() {
+        return Ok(Vec::new());
+    }
+    let client = Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let resp = client
+        .get(NOCKNAMES_VERIFIED_URL)
+        .query(&[("address", address)])
+        .send()
+        .await
+        .map_err(|e| format!("Verified names lookup failed: {e}"))?;
+    if resp.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(Vec::new());
+    }
+    if !resp.status().is_success() {
+        return Err(format!(
+            "Verified names lookup returned {} (try again later)",
+            resp.status()
+        ));
+    }
+    let entries: Vec<VerifiedNameEntry> = resp
+        .json()
+        .await
+        .map_err(|e| format!("Invalid verified names response: {e}"))?;
+    Ok(entries.into_iter().map(|e| e.name).collect())
 }
 
 /// Normalize input, query the registry API, and return availability + fee when free.

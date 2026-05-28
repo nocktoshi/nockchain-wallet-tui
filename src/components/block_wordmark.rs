@@ -47,10 +47,7 @@ pub(crate) fn render_block_wordmark(
                     let fg = if ch == '█' { logo_fg } else { gap_bg };
                     Span::styled(
                         ch.to_string(),
-                        Style::new()
-                            .fg(fg)
-                            .bg(gap_bg)
-                            .add_modifier(Modifier::BOLD),
+                        Style::new().fg(fg).bg(gap_bg).add_modifier(Modifier::BOLD),
                     )
                 })
                 .collect();

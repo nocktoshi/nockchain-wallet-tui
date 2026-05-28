@@ -8,16 +8,16 @@ use tokio::sync::{mpsc, Mutex};
 use tracing::warn;
 
 use super::input::{edit_line, esc_back, list_activate};
-use nockchain_wallet::command::{Commands, WatchSubcommand};
 use crate::command_runner::{JobCompletion, TuiRuntime};
 use crate::components::menus::BOOL;
 use crate::hooks::terminal::Term;
 use crate::prompt_overlay::{
     confirm_prompt_screen as overlay_confirm, text_prompt_screen as overlay_text,
 };
-use crate::screens::{ConfirmThen, TuiControl, Screen, TextThen};
+use crate::screens::{ConfirmThen, Screen, TextThen, TuiControl};
 use crate::store::UIStore;
 use crate::{session, wallet_api};
+use nockchain_wallet::command::{Commands, WatchSubcommand};
 
 pub(super) async fn text_prompt(
     store: &mut UIStore,
@@ -261,22 +261,24 @@ pub(super) async fn text_prompt(
                     "MigrateV0Notes",
                 );
             }
-            TextThen::SettingsGrpcEndpoint => match nockchain_wallet::connection::GrpcEndpoint::parse(&v) {
-                Ok(endpoint) => {
-                    let old_listen = session::current_api_listen(rt);
-                    let mut next = session::session_config_snapshot(rt);
-                    next.public_grpc_server_addr = endpoint.to_string();
-                    match session::commit_session(rt, next).await {
-                        Ok(_) => {
-                            wallet_api::restart_api_server_if_listen_changed(rt, &old_listen);
-                            store.session_display = session::session_config_snapshot(rt);
-                            super::replace_screen(store, Screen::Settings { sel: 0 });
+            TextThen::SettingsGrpcEndpoint => {
+                match nockchain_wallet::connection::GrpcEndpoint::parse(&v) {
+                    Ok(endpoint) => {
+                        let old_listen = session::current_api_listen(rt);
+                        let mut next = session::session_config_snapshot(rt);
+                        next.public_grpc_server_addr = endpoint.to_string();
+                        match session::commit_session(rt, next).await {
+                            Ok(_) => {
+                                wallet_api::restart_api_server_if_listen_changed(rt, &old_listen);
+                                store.session_display = session::session_config_snapshot(rt);
+                                super::replace_screen(store, Screen::Settings { sel: 0 });
+                            }
+                            Err(e) => warn!("{e}"),
                         }
-                        Err(e) => warn!("{e}"),
                     }
+                    Err(e) => warn!("{e}"),
                 }
-                Err(e) => warn!("{e}"),
-            },
+            }
             TextThen::SettingsApiListen => {
                 let old_listen = session::current_api_listen(rt);
                 let mut next = session::session_config_snapshot(rt);

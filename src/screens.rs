@@ -22,10 +22,7 @@ pub(crate) enum SendSimpleFocus {
 pub(crate) enum SendSimplePhase {
     Form,
     Planning,
-    Review {
-        cmd: Commands,
-        preview: String,
-    },
+    Review { cmd: Commands, preview: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,6 +57,10 @@ pub(crate) enum Screen {
         lookup_busy: bool,
         /// Set after a successful search for the current normalized name.
         verified_name: Option<String>,
+        /// Names currently owned by addresses in this wallet (populated on entry).
+        owned_names: Vec<String>,
+        /// True while the initial /verified lookup is in flight.
+        owned_names_loading: bool,
     },
     /// Simple send form from home (amount + address + giant buttons).
     SendSimple {
@@ -227,6 +228,8 @@ impl Screen {
             status: None,
             lookup_busy: false,
             verified_name: None,
+            owned_names: Vec::new(),
+            owned_names_loading: false,
         }
     }
 }

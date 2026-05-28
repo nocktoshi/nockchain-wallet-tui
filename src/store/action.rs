@@ -3,8 +3,8 @@
 use nockapp::NockAppError;
 use tokio::sync::watch;
 
-use nockchain_wallet::command::Commands;
 use crate::screens::Screen;
+use nockchain_wallet::command::Commands;
 
 /// All UI state transitions flow through [`super::apply_ui_action`](fn@super::apply_ui_action).
 #[derive(Debug)]
@@ -46,6 +46,9 @@ pub(crate) enum UiAction {
     },
     NudgeOutputScroll {
         delta: i32,
+    },
+    NnsOwnedNamesLoaded {
+        names: Vec<String>,
     },
     SetOutputScroll(u16),
     SetHomeTab(usize),

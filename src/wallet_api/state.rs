@@ -4,7 +4,6 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-
 use nockchain_wallet::connection::GrpcEndpoint;
 
 pub const WALLET_SESSION_SCHEMA: &str = "wallet-session-v1";

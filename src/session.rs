@@ -58,11 +58,10 @@ pub(crate) fn init_session_config(
     session_path: PathBuf,
     connection: &nockchain_wallet::ConnectionCli,
 ) -> Arc<RwLock<WalletSessionState>> {
-    let mut session =
-        crate::wallet_api::load_session_state(&session_path).unwrap_or_else(|e| {
-            tracing::warn!("loading session.json: {e}, using defaults");
-            WalletSessionState::default()
-        });
+    let mut session = crate::wallet_api::load_session_state(&session_path).unwrap_or_else(|e| {
+        tracing::warn!("loading session.json: {e}, using defaults");
+        WalletSessionState::default()
+    });
     if session.public_grpc_server_addr.is_empty() {
         session = WalletSessionState::from_connection(connection);
     }

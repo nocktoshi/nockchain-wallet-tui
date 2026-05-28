@@ -114,7 +114,13 @@ pub(crate) fn draw_send_simple(f: &mut Frame<'_>, app: &AppState, area: Rect) {
     draw_action_buttons(f, layout[4], *focus, "Cancel", "Continue");
 }
 
-fn draw_review(f: &mut Frame<'_>, area: Rect, preview: &str, scroll_y: u16, focus: SendSimpleFocus) {
+fn draw_review(
+    f: &mut Frame<'_>,
+    area: Rect,
+    preview: &str,
+    scroll_y: u16,
+    focus: SendSimpleFocus,
+) {
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(3), Constraint::Length(5)])
@@ -130,13 +136,7 @@ fn draw_review(f: &mut Frame<'_>, area: Rect, preview: &str, scroll_y: u16, focu
         .scroll((scroll_y, 0));
     f.render_widget(para, layout[0]);
 
-    draw_action_buttons(
-        f,
-        layout[1],
-        focus,
-        "Back",
-        "Send",
-    );
+    draw_action_buttons(f, layout[1], focus, "Back", "Send");
 }
 
 fn draw_action_buttons(
@@ -148,7 +148,11 @@ fn draw_action_buttons(
 ) {
     let btn_cols: Vec<Rect> = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Fill(1), Constraint::Length(2), Constraint::Fill(1)])
+        .constraints([
+            Constraint::Fill(1),
+            Constraint::Length(2),
+            Constraint::Fill(1),
+        ])
         .split(area)
         .to_vec();
 
@@ -210,11 +214,7 @@ fn draw_amount_field(f: &mut Frame<'_>, area: Rect, amount: &str, focused: bool)
         Paragraph::new(Line::from(Span::styled(
             big,
             Style::default()
-                .fg(if focused {
-                    Color::White
-                } else {
-                    THEME_MUTED
-                })
+                .fg(if focused { Color::White } else { THEME_MUTED })
                 .add_modifier(Modifier::BOLD),
         )))
         .alignment(align),

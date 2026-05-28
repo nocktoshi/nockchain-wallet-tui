@@ -24,8 +24,7 @@ pub(crate) fn status_modal_visible(state: &UiState) -> bool {
         }
         return true;
     }
-    !state.last_command_output.is_empty()
-        && state.last_command_output != view::NO_STRUCTURED_OUTPUT
+    !state.last_command_output.is_empty() && state.last_command_output != view::NO_STRUCTURED_OUTPUT
 }
 
 /// CoinGecko USD price for the home hero.

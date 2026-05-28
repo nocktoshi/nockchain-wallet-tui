@@ -35,9 +35,9 @@ mod tests {
     use tokio::sync::watch;
 
     use super::{apply_ui_action, UiAction};
-    use nockchain_wallet::command::Commands;
     use crate::app_state::UiState;
     use crate::screens::Screen;
+    use nockchain_wallet::command::Commands;
 
     #[test]
     fn tick_advances_frame_clock() {
@@ -78,13 +78,15 @@ mod tests {
             UiAction::BalanceSidebarCompleted {
                 nonce: 5,
                 result: Ok(()),
-                events: vec![nockchain_wallet::wallet_outcome::WalletEvent::BalanceSnapshotV1 {
-                    wallet_version: 1,
-                    block_id_b58: "blk".into(),
-                    height: 1,
-                    note_count: 0,
-                    total_assets: 0,
-                }],
+                events: vec![
+                    nockchain_wallet::wallet_outcome::WalletEvent::BalanceSnapshotV1 {
+                        wallet_version: 1,
+                        block_id_b58: "blk".into(),
+                        height: 1,
+                        note_count: 0,
+                        total_assets: 0,
+                    },
+                ],
             },
         );
         assert!(s.balance_panel.text.contains("Balance"));

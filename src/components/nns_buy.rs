@@ -28,6 +28,8 @@ pub(crate) fn draw_nns_buy(
         status,
         lookup_busy,
         verified_name,
+        owned_names,
+        owned_names_loading,
     } = screen
     else {
         return;
@@ -48,11 +50,19 @@ pub(crate) fn draw_nns_buy(
         } else {
             "Searching name"
         };
+        let body =
+            loading_indicator_paragraph(app, tick, Block::default().borders(Borders::NONE), label);
+        f.render_widget(body, inner);
+        return;
+    }
+
+    if *owned_names_loading {
+        let tick = app.ui_fx.frame_clock;
         let body = loading_indicator_paragraph(
             app,
             tick,
             Block::default().borders(Borders::NONE),
-            label,
+            "Loading names",
         );
         f.render_widget(body, inner);
         return;
@@ -61,33 +71,64 @@ pub(crate) fn draw_nns_buy(
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(5),
-            Constraint::Length(2),
-            Constraint::Length(3),
-            Constraint::Min(2),
-            Constraint::Length(5),
+            Constraint::Length(5), // wordmark
+            Constraint::Length(1), // margin below logo
+            Constraint::Length(3), // owned names
+            Constraint::Length(2), // spacer
+            Constraint::Length(3), // name row (search bar)
+            Constraint::Min(2),    // status
+            Constraint::Length(5), // buttons
         ])
         .split(inner);
 
     render_block_wordmark(f, layout[0], &NNS, tick as usize, WORDMARK_GAP);
 
-    draw_name_row(f, layout[2], value, *cursor, *focus);
+    draw_owned_names(f, layout[2], owned_names);
+
+    draw_name_row(f, layout[4], value, *cursor, *focus);
     draw_status(
         f,
-        layout[3],
+        layout[5],
         app,
         value,
         status.as_deref(),
         verified_name.is_some(),
     );
 
-    draw_action_buttons(f, layout[4], *focus);
+    draw_action_buttons(f, layout[6], *focus);
+}
+
+fn draw_owned_names(f: &mut Frame<'_>, area: Rect, owned: &[String]) {
+    if owned.is_empty() {
+        return;
+    }
+
+    let label = Span::styled("Your names: ", Style::default().fg(THEME_MUTED));
+    let names: Vec<Span> = owned
+        .iter()
+        .enumerate()
+        .flat_map(|(i, n)| {
+            let mut spans = vec![Span::styled(n, Style::default().fg(THEME_ACCENT_GREEN))];
+            if i + 1 < owned.len() {
+                spans.push(Span::raw("  •  "));
+            }
+            spans
+        })
+        .collect();
+
+    let line = Line::from([vec![label], names].concat());
+    let p = Paragraph::new(line).wrap(Wrap { trim: true });
+    f.render_widget(p, area);
 }
 
 fn draw_name_row(f: &mut Frame<'_>, area: Rect, value: &str, cursor: usize, focus: NnsBuyFocus) {
     let cols = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Fill(1), Constraint::Length(2), Constraint::Length(14)])
+        .constraints([
+            Constraint::Fill(1),
+            Constraint::Length(2),
+            Constraint::Length(14),
+        ])
         .split(area);
 
     let name_focused = focus == NnsBuyFocus::Name;
@@ -116,12 +157,16 @@ fn draw_name_row(f: &mut Frame<'_>, area: Rect, value: &str, cursor: usize, focu
     let name_inner = name_block.inner(cols[0]);
     f.render_widget(name_block, cols[0]);
     f.render_widget(
-        Paragraph::new(value).style(text_style).alignment(Alignment::Left),
+        Paragraph::new(value)
+            .style(text_style)
+            .alignment(Alignment::Left),
         name_inner,
     );
 
     if name_focused {
-        let col = name_inner.x.saturating_add(line_width(&value.chars().take(cursor).collect::<String>()));
+        let col = name_inner
+            .x
+            .saturating_add(line_width(&value.chars().take(cursor).collect::<String>()));
         f.set_cursor_position(ratatui::layout::Position::new(col, name_inner.y));
     }
 
@@ -189,7 +234,11 @@ fn draw_status(
 fn draw_action_buttons(f: &mut Frame<'_>, area: Rect, focus: NnsBuyFocus) {
     let btn_cols: Vec<Rect> = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Fill(1), Constraint::Length(2), Constraint::Fill(1)])
+        .constraints([
+            Constraint::Fill(1),
+            Constraint::Length(2),
+            Constraint::Fill(1),
+        ])
         .split(area)
         .to_vec();
 

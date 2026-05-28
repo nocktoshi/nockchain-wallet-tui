@@ -50,8 +50,7 @@ async fn main() -> Result<(), NockAppError> {
 
     boot::init_default_tracing(&tui.boot);
 
-    let (wallet, synced_snapshot, data_dir) =
-        boot_wallet(tui.boot.clone(), tui.fakenet).await?;
+    let (wallet, synced_snapshot, data_dir) = boot_wallet(tui.boot.clone(), tui.fakenet).await?;
 
     let opts = TuiOptions {
         boot: tui.boot,

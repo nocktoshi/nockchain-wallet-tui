@@ -19,7 +19,7 @@ use tokio::sync::{mpsc, Mutex};
 use super::app_state::status_modal_visible;
 use super::command_runner::{
     BalanceRefreshCompletion, JobCompletion, NnsLookupCompletion,
-    TuiRuntime, SendSimplePlanCompletion,
+    OwnedNnsNamesCompletion, TuiRuntime, SendSimplePlanCompletion,
 };
 use super::ct_dispatch;
 use super::hooks::terminal::Term;
@@ -64,6 +64,7 @@ pub(super) async fn dispatch_key(
     price_done_tx: &mpsc::UnboundedSender<Result<f64, String>>,
     plan_done_tx: &mpsc::UnboundedSender<SendSimplePlanCompletion>,
     nns_lookup_done_tx: &mpsc::UnboundedSender<NnsLookupCompletion>,
+    owned_nns_names_done_tx: &mpsc::UnboundedSender<OwnedNnsNamesCompletion>,
 ) -> Result<TuiControl, NockAppError> {
     if key.kind == KeyEventKind::Release {
         return Ok(TuiControl::Continue);
@@ -99,13 +100,30 @@ pub(super) async fn dispatch_key(
             return Ok(TuiControl::Continue);
         }
     }
-    match &mut store.state.screen {
+    let result = match &mut store.state.screen {
         Screen::Splash => Ok(TuiControl::Continue),
         Screen::Home => {
             home::handle_home(store, key, rt, done_tx, balance_done_tx, price_done_tx).await
         }
         Screen::Receive { .. } => receive::handle_receive(store, key).await,
         Screen::NnsBuy { .. } => {
+            // Trigger owned names fetch if we haven't loaded them yet
+            if let Screen::NnsBuy {
+                owned_names,
+                owned_names_loading,
+                ..
+            } = &mut store.state.screen
+            {
+                if owned_names.is_empty() && !*owned_names_loading {
+                    if let Some(addr) = store.state.balance_panel.address.clone() {
+                        *owned_names_loading = true;
+                        super::command_runner::schedule_nns_verified_names(
+                            addr,
+                            owned_nns_names_done_tx.clone(),
+                        );
+                    }
+                }
+            }
             nns_buy::handle_nns_buy(store, key, rt, done_tx, nns_lookup_done_tx).await
         }
         Screen::SendSimple { .. } => {
@@ -133,7 +151,29 @@ pub(super) async fn dispatch_key(
             error::error_screen(store, key, rt, terminal, done_tx).await
         }
         Screen::Running { .. } => Ok(TuiControl::Continue),
+    };
+
+    // After any handler (including menu navigation), if we are now on the NNS buy screen
+    // with no owned names loaded yet, start the fetch immediately so the loading indicator
+    // appears without waiting for another key event.
+    if let Screen::NnsBuy {
+        owned_names,
+        owned_names_loading,
+        ..
+    } = &mut store.state.screen
+    {
+        if owned_names.is_empty() && !*owned_names_loading {
+            if let Some(addr) = store.state.balance_panel.address.clone() {
+                *owned_names_loading = true;
+                super::command_runner::schedule_nns_verified_names(
+                    addr,
+                    owned_nns_names_done_tx.clone(),
+                );
+            }
+        }
     }
+
+    result
 }
 
 /// Insert bracketed-paste clipboard text into the focused field.

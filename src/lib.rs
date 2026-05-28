@@ -1,14 +1,15 @@
 //! Interactive wallet TUI (ratatui + crossterm) for [`nockchain-wallet`].
 
 mod app_state;
+mod clipboard;
 mod command_runner;
 mod components;
 mod create_tx;
 mod ct_dispatch;
+mod event_loop;
 mod format;
 mod handlers;
 mod hooks;
-mod clipboard;
 mod nns;
 mod paste;
 mod prompt_overlay;
@@ -17,7 +18,6 @@ mod send_simple;
 mod session;
 mod session_client;
 mod store;
-mod event_loop;
 mod view;
 mod wallet_api;
 
@@ -32,8 +32,8 @@ pub(crate) use wallet_api::TuiApiJob;
 use wallet_api::{generate_api_token, SESSION_FILE_NAME};
 use wallet_tx_builder::adapter::NormalizedSnapshot;
 
-use nockchain_wallet::ConnectionCli;
 use nockapp::kernel::boot::Cli as BootCli;
+use nockchain_wallet::ConnectionCli;
 use nockchain_wallet::Wallet;
 
 /// Options the TUI binary needs. Decouples the TUI from the full WalletCli (which requires a Commands subcommand).
@@ -79,7 +79,6 @@ pub async fn run_with_options(
     session::apply_session_to_cli(&rt);
     event_loop::run(rt, api_job_rx, price_done_tx, price_done_rx).await
 }
-
 
 #[cfg(test)]
 mod tests {

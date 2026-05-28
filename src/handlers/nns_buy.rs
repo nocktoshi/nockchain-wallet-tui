@@ -10,7 +10,7 @@ use crate::command_runner::{
     schedule_nns_lookup, schedule_nns_register, JobCompletion, NnsLookupCompletion, TuiRuntime,
 };
 use crate::nns;
-use crate::screens::{NnsBuyFocus, TuiControl, Screen};
+use crate::screens::{NnsBuyFocus, Screen, TuiControl};
 use crate::store::UIStore;
 
 pub(crate) fn apply_nns_lookup_result(store: &mut UIStore, result: NnsLookupCompletion) {
@@ -18,6 +18,7 @@ pub(crate) fn apply_nns_lookup_result(store: &mut UIStore, result: NnsLookupComp
         value,
         cursor,
         focus,
+        owned_names,
         ..
     } = store.state.screen.clone()
     else {
@@ -27,24 +28,28 @@ pub(crate) fn apply_nns_lookup_result(store: &mut UIStore, result: NnsLookupComp
     match result {
         Ok(ok) => {
             let status = nns::availability_message(&ok, store.state.price.usd_per_coin);
-            store.dispatch(crate::store::UiAction::ReplaceScreen(Screen::NnsBuy {
+            store.dispatch(crate::store::UiAction::ReplaceScreen(make_nns_buy(
                 value,
                 cursor,
                 focus,
-                status: Some(status),
-                lookup_busy: false,
-                verified_name: Some(ok.canonical_name),
-            }));
+                Some(status),
+                false,
+                Some(ok.canonical_name),
+                owned_names,
+                false,
+            )));
         }
         Err(msg) => {
-            store.dispatch(crate::store::UiAction::ReplaceScreen(Screen::NnsBuy {
+            store.dispatch(crate::store::UiAction::ReplaceScreen(make_nns_buy(
                 value,
                 cursor,
                 focus,
-                status: Some(format!("Error: {msg}")),
-                lookup_busy: false,
-                verified_name: None,
-            }));
+                Some(format!("Error: {msg}")),
+                false,
+                None,
+                owned_names,
+                false,
+            )));
         }
     }
 }
@@ -64,6 +69,8 @@ pub(super) async fn handle_nns_buy(
         mut status,
         lookup_busy,
         verified_name,
+        owned_names,
+        owned_names_loading: _,
     } = taken
     else {
         return Ok(TuiControl::Continue);
@@ -113,47 +120,41 @@ pub(super) async fn handle_nns_buy(
                         status = Some(format!("Error: {e}"));
                         replace_screen(
                             store,
-                            Screen::NnsBuy {
-                                value,
-                                cursor,
-                                focus,
-                                status,
-                                lookup_busy: false,
-                                verified_name: None,
-                            },
+                            make_nns_buy(value, cursor, focus, status, false, None, owned_names, false),
                         );
                         return Ok(TuiControl::Continue);
                     }
                 };
                 if verified_name.as_deref() != Some(canonical.as_str()) {
-                    status = Some(
-                        "Error: Search for the name first to confirm it is available".into(),
-                    );
+                    status =
+                        Some("Error: Search for the name first to confirm it is available".into());
                 } else {
                     replace_screen(
                         store,
-                        Screen::NnsBuy {
-                            value: value.clone(),
+                        make_nns_buy(
+                            value.clone(),
                             cursor,
                             focus,
-                            status: None,
-                            lookup_busy: true,
-                            verified_name: Some(canonical.clone()),
-                        },
+                            None,
+                            true,
+                            Some(canonical.clone()),
+                            owned_names.clone(),
+                            false,
+                        ),
                     );
-                    if let Err(e) =
-                        schedule_nns_register(store, rt, done_tx.clone(), &canonical)
-                    {
+                    if let Err(e) = schedule_nns_register(store, rt, done_tx.clone(), &canonical) {
                         replace_screen(
                             store,
-                            Screen::NnsBuy {
+                            make_nns_buy(
                                 value,
                                 cursor,
                                 focus,
-                                status: Some(format!("Error: {e}")),
-                                lookup_busy: false,
-                                verified_name: Some(canonical),
-                            },
+                                Some(format!("Error: {e}")),
+                                false,
+                                Some(canonical),
+                                owned_names,
+                                false,
+                            ),
                         );
                     }
                     return Ok(TuiControl::Continue);
@@ -183,18 +184,16 @@ pub(super) async fn handle_nns_buy(
 
     replace_screen(
         store,
-        Screen::NnsBuy {
+        make_nns_buy(
             value,
             cursor,
             focus,
-            status: if clear_verify { None } else { status },
-            lookup_busy: false,
-            verified_name: if clear_verify {
-                None
-            } else {
-                verified_name
-            },
-        },
+            if clear_verify { None } else { status },
+            false,
+            if clear_verify { None } else { verified_name },
+            owned_names,
+            false,
+        ),
     );
     Ok(TuiControl::Continue)
 }
@@ -207,6 +206,7 @@ fn start_lookup(
     let Screen::NnsBuy {
         cursor,
         focus,
+        owned_names,
         ..
     } = store.state.screen.clone()
     else {
@@ -214,16 +214,41 @@ fn start_lookup(
     };
     replace_screen(
         store,
-        Screen::NnsBuy {
-            value: value.to_string(),
+        make_nns_buy(
+            value.to_string(),
             cursor,
             focus,
-            status: None,
-            lookup_busy: true,
-            verified_name: None,
-        },
+            None,
+            true,
+            None,
+            owned_names,
+            false,
+        ),
     );
     schedule_nns_lookup(value.to_string(), lookup_done_tx.clone());
+}
+
+/// Centralized constructor so adding fields only touches one place.
+fn make_nns_buy(
+    value: String,
+    cursor: usize,
+    focus: NnsBuyFocus,
+    status: Option<String>,
+    lookup_busy: bool,
+    verified_name: Option<String>,
+    owned_names: Vec<String>,
+    owned_names_loading: bool,
+) -> Screen {
+    Screen::NnsBuy {
+        value,
+        cursor,
+        focus,
+        status,
+        lookup_busy,
+        verified_name,
+        owned_names,
+        owned_names_loading,
+    }
 }
 
 fn next_focus(f: NnsBuyFocus) -> NnsBuyFocus {

@@ -10,13 +10,12 @@ use tokio::sync::{mpsc, watch, Mutex};
 
 use super::screens::Screen;
 use super::store::{UIStore, UiAction};
+use crate::wallet_api::{TuiApiJob, WalletSessionState};
 use nockchain_wallet::command::Commands;
 use nockchain_wallet::dispatch::execute_wallet_command;
 use nockchain_wallet::wallet_outcome::{WalletCommandData, WalletEvent};
 use nockchain_wallet::WrittenTxSnapshot;
 use nockchain_wallet::{ConnectionCli, DispatchHooks, NormalizedSnapshot, Wallet};
-use crate::wallet_api::{TuiApiJob, WalletSessionState};
-
 
 const TX_DIR: &str = "txs";
 
@@ -46,11 +45,13 @@ pub(crate) type JobCompletion = (Result<(), NockAppError>, Vec<WalletEvent>, Str
 pub(crate) type BalanceRefreshCompletion = (u64, Result<(), NockAppError>, Vec<WalletEvent>);
 
 /// Simple-send planner preview (no kernel poke).
-pub(crate) type SendSimplePlanCompletion =
-    Result<(String, Commands), String>;
+pub(crate) type SendSimplePlanCompletion = Result<(String, Commands), String>;
 
 /// NNS name availability lookup (HTTP).
 pub(crate) type NnsLookupCompletion = Result<crate::nns::NnsLookupOk, String>;
+
+/// Owned `.nock` names for the active address (from /verified).
+pub(crate) type OwnedNnsNamesCompletion = Result<Vec<String>, String>;
 
 /// Home identity: active address + optional primary `.nock` name.
 pub(crate) type HomeIdentityCompletion = (Option<String>, Option<String>);
@@ -96,7 +97,15 @@ pub(crate) async fn run_command_on_runtime(
     let outcome = {
         let mut w = rt.wallet.lock().await;
         let mut s = rt.snapshot.lock().await;
-        execute_wallet_command(&rt.connection.lock().unwrap(), &mut *w, &command, &mut *s, false, hooks).await
+        execute_wallet_command(
+            &rt.connection.lock().unwrap(),
+            &mut *w,
+            &command,
+            &mut *s,
+            false,
+            hooks,
+        )
+        .await
     };
     match finalize_outcome(outcome, &rt.wallet_event_sink).await {
         Ok(mut data) => {
@@ -152,8 +161,7 @@ pub(crate) fn schedule_wallet_command(
 
     let rt = rt.clone();
     tokio::task::spawn_local(async move {
-        let outcome =
-            run_command_on_runtime(&rt, cmd_clone, Some(progress_tx), None).await;
+        let outcome = run_command_on_runtime(&rt, cmd_clone, Some(progress_tx), None).await;
         let events = outcome
             .as_ref()
             .map(|d| d.events.clone())
@@ -185,13 +193,8 @@ pub(crate) fn schedule_balance_sidebar_refresh(
 
     let tx = done_tx.clone();
     tokio::task::spawn_local(async move {
-        let outcome = run_command_on_runtime(
-            &rt,
-            Commands::ShowBalance,
-            Some(progress_tx),
-            None,
-        )
-        .await;
+        let outcome =
+            run_command_on_runtime(&rt, Commands::ShowBalance, Some(progress_tx), None).await;
         let events = outcome
             .as_ref()
             .map(|d| d.events.clone())
@@ -253,13 +256,7 @@ pub(crate) fn schedule_home_identity_fetch(
     let rt = rt.clone();
     let tx = done_tx.clone();
     tokio::task::spawn_local(async move {
-        let outcome = run_command_on_runtime(
-            &rt,
-            Commands::ListActiveAddresses,
-            None,
-            None,
-        )
-        .await;
+        let outcome = run_command_on_runtime(&rt, Commands::ListActiveAddresses, None, None).await;
         let events = outcome
             .as_ref()
             .map(|d| d.events.clone())
@@ -279,10 +276,7 @@ pub(crate) fn apply_home_identity_result(
     address: Option<String>,
     nockname: Option<String>,
 ) {
-    store.dispatch(UiAction::HomeIdentityCompleted {
-        address,
-        nockname,
-    });
+    store.dispatch(UiAction::HomeIdentityCompleted { address, nockname });
 }
 
 pub(crate) fn apply_job_result(
@@ -320,6 +314,17 @@ pub(crate) fn schedule_nns_lookup(
 ) {
     tokio::task::spawn_local(async move {
         let result = crate::nns::lookup_name(&raw).await;
+        let _ = done_tx.send(result);
+    });
+}
+
+/// Query NNS registry for all verified names owned by an address (background HTTP).
+pub(crate) fn schedule_nns_verified_names(
+    address: String,
+    done_tx: mpsc::UnboundedSender<OwnedNnsNamesCompletion>,
+) {
+    tokio::task::spawn_local(async move {
+        let result = crate::nns::list_verified_names(&address).await;
         let _ = done_tx.send(result);
     });
 }
@@ -372,13 +377,8 @@ pub(crate) fn schedule_create_and_send(
             }
         };
 
-        let create_outcome = run_command_on_runtime(
-            &rt,
-            create_cmd,
-            Some(progress_tx),
-            Some(before.clone()),
-        )
-        .await;
+        let create_outcome =
+            run_command_on_runtime(&rt, create_cmd, Some(progress_tx), Some(before.clone())).await;
 
         let mut events = create_outcome
             .as_ref()
@@ -396,8 +396,7 @@ pub(crate) fn schedule_create_and_send(
             let markdown = rt.tui_markdown_sink.lock().unwrap().clone();
             let _ = done_tx.send((
                 Err(NockAppError::OtherError(
-                    "create-tx finished but no transaction file was written under ./txs/"
-                        .into(),
+                    "create-tx finished but no transaction file was written under ./txs/".into(),
                 )),
                 events,
                 markdown,
@@ -409,7 +408,13 @@ pub(crate) fn schedule_create_and_send(
         for path in tx_paths {
             let send_outcome = run_command_on_runtime(
                 &rt,
-                Commands::SendTx { transaction: path.clone() }, None, None).await;
+                Commands::SendTx {
+                    transaction: path.clone(),
+                },
+                None,
+                None,
+            )
+            .await;
             match send_outcome {
                 Ok(data) => events.extend(data.events),
                 Err(e) => {
@@ -509,9 +514,12 @@ fn parse_tx_paths_from_markdown(markdown: &str) -> Vec<String> {
     markdown
         .lines()
         .filter_map(|line| {
-            line.split("Saved transaction to ")
-                .nth(1)
-                .map(|rest| rest.trim().trim_start_matches('`').trim_end_matches('`').to_string())
+            line.split("Saved transaction to ").nth(1).map(|rest| {
+                rest.trim()
+                    .trim_start_matches('`')
+                    .trim_end_matches('`')
+                    .to_string()
+            })
         })
         .collect()
 }

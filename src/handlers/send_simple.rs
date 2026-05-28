@@ -7,10 +7,10 @@ use tokio::sync::mpsc;
 use super::input::{esc_back, try_output_scroll_keys};
 use super::replace_screen;
 use crate::command_runner::{
-    schedule_send_simple_create_and_send, schedule_send_simple_plan, JobCompletion, TuiRuntime,
-    SendSimplePlanCompletion,
+    schedule_send_simple_create_and_send, schedule_send_simple_plan, JobCompletion,
+    SendSimplePlanCompletion, TuiRuntime,
 };
-use crate::screens::{TuiControl, Screen, SendSimpleFocus, SendSimplePhase};
+use crate::screens::{Screen, SendSimpleFocus, SendSimplePhase, TuiControl};
 use crate::send_simple::{build_create_tx_command, max_amount_string};
 use crate::store::{UIStore, UiAction};
 
@@ -108,11 +108,7 @@ pub(super) async fn handle_send_simple(
                             review_scroll: 0,
                         },
                     );
-                    schedule_send_simple_plan(
-                        rt.clone(),
-                        cmd,
-                        plan_done_tx.clone(),
-                    );
+                    schedule_send_simple_plan(rt.clone(), cmd, plan_done_tx.clone());
                     return Ok(TuiControl::Continue);
                 }
                 Err(e) => status = Some(e),
@@ -295,10 +291,7 @@ async fn handle_send_simple_review(
     Ok(TuiControl::Continue)
 }
 
-pub(crate) fn apply_send_simple_plan_result(
-    store: &mut UIStore,
-    result: SendSimplePlanCompletion,
-) {
+pub(crate) fn apply_send_simple_plan_result(store: &mut UIStore, result: SendSimplePlanCompletion) {
     let Screen::SendSimple {
         amount,
         recipient,

@@ -8,20 +8,19 @@ use tokio::sync::{mpsc, Mutex};
 use tracing::warn;
 
 use super::input::{edit_line, esc_back, list_activate};
-use nockchain_wallet::command::Commands;
 use crate::command_runner::{JobCompletion, TuiRuntime};
 use crate::components::menus::{
-    BOOL, IMPORT_SRC, KEYS_MENU, NOTES_MENU, SETTINGS_MENU, SIGN_MENU, TX_MENU,
-    WATCH_MENU,
+    BOOL, IMPORT_SRC, KEYS_MENU, NOTES_MENU, SETTINGS_MENU, SIGN_MENU, TX_MENU, WATCH_MENU,
 };
 use crate::create_tx::CreateTxWizard;
 use crate::hooks::logging::{log_help, log_verbose_info};
 use crate::hooks::terminal::Term;
-use crate::screens::{ConfirmThen, TuiControl, Screen, TextThen};
+use crate::screens::{ConfirmThen, Screen, TextThen, TuiControl};
 use crate::session::current_api_listen;
 use crate::session_client::api_base_url;
 use crate::store::UIStore;
 use crate::{normalize_slash_cmd, session};
+use nockchain_wallet::command::Commands;
 
 /// Navigate from the home Menu tab (`MAIN_MENU` index).
 pub(super) fn navigate_main_menu_item(store: &mut UIStore, i: usize) {
@@ -715,10 +714,7 @@ curl -sS '{base}/health' \
     }
 }
 
-pub(super) fn handle_quick(
-    store: &mut UIStore,
-    key: KeyEvent,
-) -> Result<TuiControl, NockAppError> {
+pub(super) fn handle_quick(store: &mut UIStore, key: KeyEvent) -> Result<TuiControl, NockAppError> {
     let taken = store.state.screen.clone();
     super::replace_screen(
         store,
@@ -777,36 +773,35 @@ pub(super) fn handle_exit_confirm(
 ) -> Result<TuiControl, NockAppError> {
     let taken = store.state.screen.clone();
     match taken {
-        Screen::ExitConfirm {
-            underlay,
-            mut sel,
-        } => match list_activate(&mut sel, BOOL.len(), key.code) {
-            Err(()) => {
-                super::replace_screen(
-                    store,
-                    crate::prompt_overlay::exit_confirm((*underlay).clone(), sel),
-                );
-                Ok(TuiControl::Continue)
-            }
-            Ok(None) => {
-                if esc_back(key.code) {
-                    super::replace_screen(store, *underlay);
-                } else {
+        Screen::ExitConfirm { underlay, mut sel } => {
+            match list_activate(&mut sel, BOOL.len(), key.code) {
+                Err(()) => {
                     super::replace_screen(
                         store,
                         crate::prompt_overlay::exit_confirm((*underlay).clone(), sel),
                     );
+                    Ok(TuiControl::Continue)
                 }
-                Ok(TuiControl::Continue)
-            }
-            Ok(Some(i)) => {
-                if i == 0 {
-                    return Ok(TuiControl::Quit);
+                Ok(None) => {
+                    if esc_back(key.code) {
+                        super::replace_screen(store, *underlay);
+                    } else {
+                        super::replace_screen(
+                            store,
+                            crate::prompt_overlay::exit_confirm((*underlay).clone(), sel),
+                        );
+                    }
+                    Ok(TuiControl::Continue)
                 }
-                super::replace_screen(store, *underlay);
-                Ok(TuiControl::Continue)
+                Ok(Some(i)) => {
+                    if i == 0 {
+                        return Ok(TuiControl::Quit);
+                    }
+                    super::replace_screen(store, *underlay);
+                    Ok(TuiControl::Continue)
+                }
             }
-        },
+        }
         other => {
             super::replace_screen(store, other);
             Ok(TuiControl::Continue)

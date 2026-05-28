@@ -136,10 +136,7 @@ fn draw_address_card(f: &mut Frame<'_>, area: Rect, address: Option<&str>, error
             ))
         })
         .collect();
-    f.render_widget(
-        Paragraph::new(styled).alignment(Alignment::Center),
-        inner,
-    );
+    f.render_widget(Paragraph::new(styled).alignment(Alignment::Center), inner);
 }
 
 fn draw_instructions(f: &mut Frame<'_>, area: Rect) {

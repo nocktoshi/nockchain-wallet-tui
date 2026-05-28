@@ -17,7 +17,7 @@ use tokio::task::LocalSet;
 
 use super::command_runner::{
     self, BalanceRefreshCompletion, HomeIdentityCompletion, JobCompletion, NnsLookupCompletion,
-    TuiRuntime, SendSimplePlanCompletion,
+    OwnedNnsNamesCompletion, SendSimplePlanCompletion, TuiRuntime,
 };
 use super::components::root::draw_ui;
 use super::handlers;
@@ -38,12 +38,7 @@ pub(super) async fn run(
     price_done_rx: mpsc::UnboundedReceiver<Result<f64, String>>,
 ) -> Result<(), NockAppError> {
     LocalSet::new()
-        .run_until(run_inner(
-            rt,
-            api_job_rx,
-            price_done_tx,
-            price_done_rx,
-        ))
+        .run_until(run_inner(rt, api_job_rx, price_done_tx, price_done_rx))
         .await
 }
 
@@ -74,6 +69,8 @@ async fn run_inner(
     let (plan_done_tx, mut plan_done_rx) = mpsc::unbounded_channel::<SendSimplePlanCompletion>();
     let (nns_lookup_done_tx, mut nns_lookup_done_rx) =
         mpsc::unbounded_channel::<NnsLookupCompletion>();
+    let (owned_nns_names_done_tx, mut owned_nns_names_done_rx) =
+        mpsc::unbounded_channel::<OwnedNnsNamesCompletion>();
     let (identity_done_tx, mut identity_done_rx) =
         mpsc::unbounded_channel::<HomeIdentityCompletion>();
 
@@ -127,6 +124,14 @@ async fn run_inner(
                     handlers::apply_nns_lookup_result(&mut store, result);
                 }
             }
+            maybe_owned_nns = owned_nns_names_done_rx.recv() => {
+                if let Some(result) = maybe_owned_nns {
+                    if let Ok(names) = result {
+                        store.dispatch(UiAction::NnsOwnedNamesLoaded { names });
+                        store.dispatch(UiAction::Tick);
+                    }
+                }
+            }
             maybe_identity = identity_done_rx.recv() => {
                 if let Some((address, nockname)) = maybe_identity {
                     command_runner::apply_home_identity_result(&mut store, address, nockname);
@@ -159,6 +164,7 @@ async fn run_inner(
                             &price_done_tx,
                             &plan_done_tx,
                             &nns_lookup_done_tx,
+                            &owned_nns_names_done_tx,
                         )
                         .await
                         {

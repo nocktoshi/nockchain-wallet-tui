@@ -14,14 +14,13 @@ use super::home::{balance_button_abs_rect, draw_wallet_tab};
 use super::home_tabs::draw_home_tabs;
 use super::loading::loading_indicator_paragraph;
 use super::menus::{
-    IMPORT_SRC, KEYS_MENU, MAIN_MENU, NOTES_MENU, SETTINGS_MENU, SIGN_MENU, TX_MENU,
-    WATCH_MENU,
+    IMPORT_SRC, KEYS_MENU, MAIN_MENU, NOTES_MENU, SETTINGS_MENU, SIGN_MENU, TX_MENU, WATCH_MENU,
 };
 use super::nns_buy::draw_nns_buy;
 use super::prompt_bar::{draw_prompt_bar, prompt_bar_height};
 use super::receive::draw_receive;
-use super::send_simple_panel::draw_send_simple;
 use super::scroll::estimate_wrapped_source_lines;
+use super::send_simple_panel::draw_send_simple;
 use super::splash::draw_splash;
 use super::theme::{
     pulse_border_green, SPLASH_BRAND, THEME_ACCENT_GREEN, THEME_BG_DEEP, THEME_MUTED,
@@ -42,7 +41,10 @@ pub(crate) fn draw_ui(f: &mut Frame<'_>, store: &mut crate::store::UIStore) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(pulse))
-        .title(Span::styled(SPLASH_BRAND, Style::default().fg(THEME_ACCENT_GREEN)))
+        .title(Span::styled(
+            SPLASH_BRAND,
+            Style::default().fg(THEME_ACCENT_GREEN),
+        ))
         .style(Style::default().bg(THEME_BG_DEEP));
     let inner = block.inner(f.area());
     f.render_widget(block, f.area());
@@ -105,7 +107,12 @@ pub(crate) fn draw_ui(f: &mut Frame<'_>, store: &mut crate::store::UIStore) {
     }
 }
 
-fn draw_prompt_footer(f: &mut Frame<'_>, app: &AppState, area: ratatui::layout::Rect, prompt_h: u16) {
+fn draw_prompt_footer(
+    f: &mut Frame<'_>,
+    app: &AppState,
+    area: ratatui::layout::Rect,
+    prompt_h: u16,
+) {
     if area.height == 0 {
         return;
     }
@@ -176,20 +183,11 @@ fn draw_activity_panel(
             let t = format!("Quick command (help, exit, …)\n\n> {line}");
             let p = Paragraph::new(t)
                 .wrap(Wrap { trim: true })
-                .block(activity_block(
-                    "Quick",
-                    !status_modal_visible(app),
-                ));
+                .block(activity_block("Quick", !status_modal_visible(app)));
             f.render_widget(p, area);
         }
         Screen::CreateTx { w } => {
-            draw_create_tx(
-                f,
-                area,
-                w,
-                tick,
-                !status_modal_visible(app),
-            );
+            draw_create_tx(f, area, w, tick, !status_modal_visible(app));
         }
         Screen::ErrorScreen {
             msg, sel, actions, ..
@@ -222,7 +220,8 @@ fn draw_home_shell(f: &mut Frame<'_>, app: &mut AppState, area: ratatui::layout:
         .split(area);
 
     f.render_widget(
-        Paragraph::new(header_star_line(tick as usize)).alignment(ratatui::layout::Alignment::Center),
+        Paragraph::new(header_star_line(tick as usize))
+            .alignment(ratatui::layout::Alignment::Center),
         layout[0],
     );
     draw_home_tabs(f, layout[1], app.home_tab, tick);
@@ -389,9 +388,10 @@ fn activity_hint_line(app: &AppState) -> Line<'static> {
     }
     if let Screen::SendSimple { phase, .. } = &app.screen {
         return match phase {
-            SendSimplePhase::Planning => Line::from(vec![
-                Span::styled("Planning transaction…", Style::default().fg(Color::Yellow)),
-            ]),
+            SendSimplePhase::Planning => Line::from(vec![Span::styled(
+                "Planning transaction…",
+                Style::default().fg(Color::Yellow),
+            )]),
             SendSimplePhase::Review { .. } => Line::from(vec![
                 Span::styled("↑/↓ ", Style::default().fg(Color::Yellow)),
                 Span::raw("scroll  "),

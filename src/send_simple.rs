@@ -3,14 +3,14 @@
 use nockapp::NockAppError;
 use nockchain_types::common::Hash;
 
-use nockchain_wallet::command::{Commands, NoteSelectionStrategyCli};
-use nockchain_wallet::recipient::RecipientSpecToken;
 use crate::format::{format_nock_from_nicks, parse_nock_amount_to_nicks};
-use nockchain_wallet::recipient::recipient_tokens_to_specs;
 use crate::screens::{Screen, SendSimpleFocus, SendSimplePhase};
 use crate::view;
-use nockchain_wallet::Wallet;
 use crate::view::total_assets_nicks;
+use nockchain_wallet::command::{Commands, NoteSelectionStrategyCli};
+use nockchain_wallet::recipient::recipient_tokens_to_specs;
+use nockchain_wallet::recipient::RecipientSpecToken;
+use nockchain_wallet::Wallet;
 
 const NICKS_PER_NOCK: u128 = 65_536;
 
@@ -89,10 +89,7 @@ pub(crate) async fn plan_send_preview(
     ))
 }
 
-pub(crate) fn build_create_tx_command(
-    amount: &str,
-    recipient: &str,
-) -> Result<Commands, String> {
+pub(crate) fn build_create_tx_command(amount: &str, recipient: &str) -> Result<Commands, String> {
     let nicks = parse_nock_amount_to_nicks(amount)?;
     let addr = recipient.trim().to_string();
     if addr.is_empty() {
@@ -121,14 +118,18 @@ pub(crate) fn build_create_tx_command(
     })
 }
 
-pub(crate) fn spendable_balance_line(events: &[nockchain_wallet::wallet_outcome::WalletEvent]) -> String {
+pub(crate) fn spendable_balance_line(
+    events: &[nockchain_wallet::wallet_outcome::WalletEvent],
+) -> String {
     match total_assets_nicks(events) {
         Some(n) => format!("Spendable: {}", format_nock_from_nicks(n as u128)),
         None => "Spendable: —".to_string(),
     }
 }
 
-pub(crate) fn max_amount_string(events: &[nockchain_wallet::wallet_outcome::WalletEvent]) -> Option<String> {
+pub(crate) fn max_amount_string(
+    events: &[nockchain_wallet::wallet_outcome::WalletEvent],
+) -> Option<String> {
     total_assets_nicks(events).map(|n| {
         let nocks = n as f64 / NICKS_PER_NOCK as f64;
         format_nock_display(nocks)

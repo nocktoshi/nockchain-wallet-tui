@@ -47,14 +47,13 @@ pub(crate) async fn fetch_nock_usd() -> Result<f64, String> {
         .timeout(Duration::from_secs(8))
         .build()
         .map_err(|e| e.to_string())?;
-    let mut req = client.get(COINGECKO_PRICE_URL).query(&[
-        ("ids", COIN_ID),
-        ("vs_currencies", "usd"),
-    ]);
+    let mut req = client
+        .get(COINGECKO_PRICE_URL)
+        .query(&[("ids", COIN_ID), ("vs_currencies", "usd")]);
     if let Some(key) = api_key.as_deref() {
         let name = HeaderName::from_static(DEMO_KEY_HEADER);
-        let value = HeaderValue::from_str(key)
-            .map_err(|e| format!("Invalid COINGECKO_API_KEY: {e}"))?;
+        let value =
+            HeaderValue::from_str(key).map_err(|e| format!("Invalid COINGECKO_API_KEY: {e}"))?;
         req = req.header(name, value);
     }
     let resp = req

@@ -8,9 +8,7 @@ pub(crate) fn parse_nock_amount_to_nicks(s: &str) -> Result<u64, String> {
     if t.is_empty() {
         return Err("Amount is required".into());
     }
-    let nocks: f64 = t
-        .parse()
-        .map_err(|e| format!("Invalid amount: {e}"))?;
+    let nocks: f64 = t.parse().map_err(|e| format!("Invalid amount: {e}"))?;
     if !nocks.is_finite() || nocks <= 0.0 {
         return Err("Amount must be greater than zero".into());
     }

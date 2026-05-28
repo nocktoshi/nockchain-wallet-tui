@@ -139,7 +139,11 @@ pub(crate) fn render_balance_sidebar(events: &[WalletEvent]) -> String {
         } = event
         {
             return render_balance_snapshot(
-                *wallet_version, block_id_b58, *height, *note_count, *total_assets,
+                *wallet_version,
+                block_id_b58,
+                *height,
+                *note_count,
+                *total_assets,
             );
         }
     }
@@ -155,7 +159,11 @@ fn render_one_event(event: &WalletEvent) -> String {
             note_count,
             total_assets,
         } => render_balance_snapshot(
-            *wallet_version, block_id_b58, *height, *note_count, *total_assets,
+            *wallet_version,
+            block_id_b58,
+            *height,
+            *note_count,
+            *total_assets,
         ),
         WalletEvent::NotesListV1 {
             height,
@@ -178,7 +186,12 @@ fn render_one_event(event: &WalletEvent) -> String {
             skipped_count,
             signers,
         } => render_migrate_summary(
-            destination, block_id, *height, *examined_signers, *created_count, *skipped_count,
+            destination,
+            block_id,
+            *height,
+            *examined_signers,
+            *created_count,
+            *skipped_count,
             signers,
         ),
         WalletEvent::TxAcceptedV1 { tx_id, accepted } => render_tx_accepted(tx_id, *accepted),
@@ -188,9 +201,7 @@ fn render_one_event(event: &WalletEvent) -> String {
             blob,
             tx_paths,
         } => render_nns_registration(name, *fee_nicks, blob, tx_paths),
-        WalletEvent::CreateTxV1 { tx_paths, summary } => {
-            render_create_tx_v1(tx_paths, summary)
-        }
+        WalletEvent::CreateTxV1 { tx_paths, summary } => render_create_tx_v1(tx_paths, summary),
     }
 }
 
@@ -378,9 +389,7 @@ fn render_create_tx_v1(tx_paths: &[String], summary: &str) -> String {
         lines.push("### Transaction files".to_string());
         for path in tx_paths {
             lines.push(format!("- `{path}`"));
-            lines.push(format!(
-                "  submit: `nockchain-wallet send-tx \"{path}\"`"
-            ));
+            lines.push(format!("  submit: `nockchain-wallet send-tx \"{path}\"`"));
         }
     }
     lines.join("\n")

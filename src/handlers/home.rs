@@ -5,12 +5,12 @@ use nockapp::NockAppError;
 
 use super::input::{esc_back, list_activate};
 use super::{replace_screen, schedule_cmd};
-use nockchain_wallet::command::Commands;
 use crate::command_runner::TuiRuntime;
 use crate::components::home::cta_key_to_index;
 use crate::components::menus::MAIN_MENU;
-use crate::screens::{TuiControl, Screen};
+use crate::screens::{Screen, TuiControl};
 use crate::store::{UIStore, UiAction};
+use nockchain_wallet::command::Commands;
 use tokio::sync::mpsc;
 
 pub(super) async fn handle_home(
@@ -112,4 +112,3 @@ pub(super) async fn handle_home(
         }
     }
 }
-
