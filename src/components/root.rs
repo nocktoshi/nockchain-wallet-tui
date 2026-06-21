@@ -14,7 +14,6 @@ use super::home::{balance_button_abs_rect, draw_wallet_tab};
 use super::home_tabs::draw_home_tabs;
 use super::loading::loading_indicator_paragraph;
 use super::menus::{MAIN_MENU, SETTINGS_MENU};
-use crate::actions;
 use super::nns_buy::draw_nns_buy;
 use super::prompt_bar::{draw_prompt_bar, prompt_bar_height};
 use super::receive::draw_receive;
@@ -24,9 +23,9 @@ use super::splash::draw_splash;
 use super::theme::{
     pulse_border_green, SPLASH_BRAND, THEME_ACCENT_GREEN, THEME_BG_DEEP, THEME_MUTED,
 };
+use crate::actions;
 use crate::app_state::{status_modal_visible, AppState};
-use crate::prompt_overlay::{activity_underlay, has_prompt_overlay};
-use crate::screens::{Screen, SendSimplePhase};
+use crate::screens::{Overlay, Screen, SendSimplePhase};
 
 pub(crate) fn draw_ui(f: &mut Frame<'_>, store: &mut crate::store::UIStore) {
     let app = &mut store.state;
@@ -48,13 +47,11 @@ pub(crate) fn draw_ui(f: &mut Frame<'_>, store: &mut crate::store::UIStore) {
     let inner = block.inner(f.area());
     f.render_widget(block, f.area());
 
-    let panel = match &app.screen {
-        Screen::Running { restore, .. } => (**restore).clone(),
-        s => s.clone(),
-    };
-    let is_running = matches!(app.screen, Screen::Running { .. });
+    // The route stays put while a job runs; the spinner is drawn over it in the status panel.
+    let panel = app.screen.clone();
+    let is_running = app.job.is_some();
     let status_visible = status_modal_visible(app);
-    let prompt_h = prompt_bar_height(&app.screen);
+    let prompt_h = prompt_bar_height(&app.overlay);
     const HINT_LINES: u16 = 1;
 
     if status_visible {
@@ -70,7 +67,6 @@ pub(crate) fn draw_ui(f: &mut Frame<'_>, store: &mut crate::store::UIStore) {
             &panel,
             tick,
             is_running,
-            has_prompt_overlay(&app.screen),
         );
         draw_status_panel(f, app, chunks[1], is_running);
     } else if prompt_h > 0 {
@@ -89,7 +85,6 @@ pub(crate) fn draw_ui(f: &mut Frame<'_>, store: &mut crate::store::UIStore) {
             &panel,
             tick,
             is_running,
-            has_prompt_overlay(&app.screen),
         );
         draw_prompt_footer(f, app, chunks[1], prompt_h);
     } else {
@@ -101,7 +96,6 @@ pub(crate) fn draw_ui(f: &mut Frame<'_>, store: &mut crate::store::UIStore) {
             &panel,
             tick,
             is_running,
-            has_prompt_overlay(&app.screen),
         );
     }
 }
@@ -120,7 +114,8 @@ fn draw_prompt_footer(
         .constraints([Constraint::Length(prompt_h), Constraint::Length(1)])
         .split(area);
     draw_prompt_bar(f, app, chunks[0]);
-    f.render_widget(Paragraph::new(activity_hint_line(app)), chunks[1]);
+    // Overlay-aware hint ("type … Enter submit … Esc cancel"), not the underlying route's hint.
+    f.render_widget(Paragraph::new(status_modal_hint_line(app)), chunks[1]);
 }
 
 fn draw_activity_panel(
@@ -131,7 +126,6 @@ fn draw_activity_panel(
     panel: &Screen,
     tick: u64,
     is_running: bool,
-    overlay_active: bool,
 ) {
     if area.height == 0 || area.width == 0 {
         return;
@@ -146,24 +140,28 @@ fn draw_activity_panel(
         render_home_ambient(f, area, tick as usize, mask);
     }
 
-    let panel = if overlay_active {
-        activity_underlay(panel)
-    } else {
-        panel.clone()
-    };
-    let panel = &panel;
-
+    // The route is always the underlay; any overlay draws in the prompt bar, not here.
     match panel {
         Screen::Home if !is_running => draw_home_shell(f, app, area, tick),
         Screen::Receive { .. } => draw_receive(f, app, panel, area, tick),
         Screen::NnsBuy { .. } => draw_nns_buy(f, app, panel, area, tick),
         Screen::SendSimple { .. } if !is_running => draw_send_simple(f, app, area),
-        Screen::Notes { sel } => {
-            list_draw(f, app, area, "Balances", &actions::labels(actions::NOTES_ITEMS), *sel)
-        }
-        Screen::Keys { sel } => {
-            list_draw(f, app, area, "Keys", &actions::labels(actions::KEYS_ITEMS), *sel)
-        }
+        Screen::Notes { sel } => list_draw(
+            f,
+            app,
+            area,
+            "Balances",
+            &actions::labels(actions::NOTES_ITEMS),
+            *sel,
+        ),
+        Screen::Keys { sel } => list_draw(
+            f,
+            app,
+            area,
+            "Keys",
+            &actions::labels(actions::KEYS_ITEMS),
+            *sel,
+        ),
         Screen::KeysImport { sel } => list_draw(
             f,
             app,
@@ -172,15 +170,30 @@ fn draw_activity_panel(
             &actions::labels(actions::KEYS_IMPORT_ITEMS),
             *sel,
         ),
-        Screen::Transactions { sel } => {
-            list_draw(f, app, area, "Transactions", &actions::labels(actions::TX_ITEMS), *sel)
-        }
-        Screen::Watch { sel } => {
-            list_draw(f, app, area, "Watch-only", &actions::labels(actions::WATCH_ITEMS), *sel)
-        }
-        Screen::SignVerify { sel } => {
-            list_draw(f, app, area, "Sign / verify", &actions::labels(actions::SIGN_ITEMS), *sel)
-        }
+        Screen::Transactions { sel } => list_draw(
+            f,
+            app,
+            area,
+            "Transactions",
+            &actions::labels(actions::TX_ITEMS),
+            *sel,
+        ),
+        Screen::Watch { sel } => list_draw(
+            f,
+            app,
+            area,
+            "Watch-only",
+            &actions::labels(actions::WATCH_ITEMS),
+            *sel,
+        ),
+        Screen::SignVerify { sel } => list_draw(
+            f,
+            app,
+            area,
+            "Sign / verify",
+            &actions::labels(actions::SIGN_ITEMS),
+            *sel,
+        ),
         Screen::Settings { sel } => {
             let endpoint_line = format!(
                 "Public gRPC: `{}`\nJSON API: `{}`",
@@ -218,10 +231,9 @@ fn draw_activity_panel(
             f.render_widget(header, split[0]);
             list_draw(f, app, split[1], "Choose", actions, *sel);
         }
-        Screen::Running { .. } | Screen::Splash => {}
+        Screen::Splash => {}
         Screen::Home => {}
         Screen::SendSimple { .. } => {}
-        Screen::TextPrompt { .. } | Screen::Confirm { .. } | Screen::ExitConfirm { .. } => {}
     }
 }
 
@@ -264,7 +276,7 @@ fn draw_status_panel(
         return;
     }
     let tick = app.ui_fx.frame_clock;
-    let prompt_h = prompt_bar_height(&app.screen);
+    let prompt_h = prompt_bar_height(&app.overlay);
     let status_split = if prompt_h > 0 {
         Layout::default()
             .direction(Direction::Vertical)
@@ -286,14 +298,20 @@ fn draw_status_panel(
         (status_split[0], None, status_split[1])
     };
 
-    let title = Span::styled("Output", Style::default().fg(Color::Cyan));
+    // On a command success with output, the panel title carries the green ✓ confirmation (no
+    // separate toast); otherwise it's a plain "Output" header.
+    let title = match &app.last_command_status {
+        Some(status) if !is_running => Span::styled(
+            format!("✓ {status}"),
+            Style::default()
+                .fg(THEME_ACCENT_GREEN)
+                .add_modifier(Modifier::BOLD),
+        ),
+        _ => Span::styled("Output", Style::default().fg(Color::Cyan)),
+    };
 
     if is_running {
-        let label = if let Screen::Running { label, .. } = &app.screen {
-            label.as_str()
-        } else {
-            ""
-        };
+        let label = app.job.as_ref().map(|j| j.label.as_str()).unwrap_or("");
         let running_block = status_panel_block(true, title);
         let body = loading_indicator_paragraph(app, tick, running_block, label);
         f.render_widget(body, output_area);
@@ -327,7 +345,7 @@ fn draw_status_panel(
 }
 
 fn status_modal_hint_line(app: &AppState) -> Line<'static> {
-    if matches!(app.screen, Screen::Running { .. }) {
+    if app.job.is_some() {
         return Line::from(vec![
             Span::styled("Working… ", Style::default().fg(Color::Yellow)),
             Span::styled("(see spinner above)", Style::default().fg(Color::DarkGray)),
@@ -341,9 +359,9 @@ fn status_modal_hint_line(app: &AppState) -> Line<'static> {
             Span::raw(" dismiss"),
         ]);
     }
-    if has_prompt_overlay(&app.screen) {
-        return match &app.screen {
-            Screen::TextPrompt { .. } => Line::from(vec![
+    if let Some(overlay) = &app.overlay {
+        return match overlay {
+            Overlay::Prompt { .. } => Line::from(vec![
                 Span::styled("type ", Style::default().fg(Color::Yellow)),
                 Span::raw("input  "),
                 Span::styled("Enter ", Style::default().fg(Color::Yellow)),
@@ -351,18 +369,17 @@ fn status_modal_hint_line(app: &AppState) -> Line<'static> {
                 Span::styled("Esc ", Style::default().fg(THEME_MUTED)),
                 Span::raw("cancel"),
             ]),
-            Screen::Confirm { .. } | Screen::ExitConfirm { .. } => Line::from(vec![
-                Span::styled("↑/↓ ", Style::default().fg(Color::Yellow)),
+            Overlay::Confirm { .. } | Overlay::ExitConfirm { .. } => Line::from(vec![
+                Span::styled("↑↓←→ ", Style::default().fg(Color::Yellow)),
                 Span::raw("choose  "),
-                Span::styled("Enter ", Style::default().fg(Color::Yellow)),
+                Span::styled("Enter/letter ", Style::default().fg(Color::Yellow)),
                 Span::raw("confirm  "),
                 Span::styled("Esc ", Style::default().fg(THEME_MUTED)),
                 Span::raw("cancel"),
             ]),
-            _ => Line::from(""),
         };
     }
-    if status_modal_visible(app) && !matches!(app.screen, Screen::Running { .. }) {
+    if status_modal_visible(app) && app.job.is_none() {
         return Line::from(vec![
             Span::styled("↑/↓ j/k ", Style::default().fg(Color::Yellow)),
             Span::raw("scroll  "),

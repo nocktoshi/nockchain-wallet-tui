@@ -20,12 +20,24 @@ pub const TUI_OUTCOME_SCHEMA: &str = "tui-wallet-outcome-v1";
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Section {
-    Heading { text: String },
-    Text { text: String },
-    KeyValue { key: String, value: String },
-    Table { headers: Vec<String>, rows: Vec<Vec<String>> },
+    Heading {
+        text: String,
+    },
+    Text {
+        text: String,
+    },
+    KeyValue {
+        key: String,
+        value: String,
+    },
+    Table {
+        headers: Vec<String>,
+        rows: Vec<Vec<String>>,
+    },
     /// Unstructured passthrough (kernel markdown without a structured event yet).
-    Raw { text: String },
+    Raw {
+        text: String,
+    },
 }
 
 impl Section {
@@ -54,7 +66,11 @@ impl Section {
                 lines.push(format!("| {} |", headers.join(" | ")));
                 lines.push(format!(
                     "| {} |",
-                    headers.iter().map(|_| "---").collect::<Vec<_>>().join(" | ")
+                    headers
+                        .iter()
+                        .map(|_| "---")
+                        .collect::<Vec<_>>()
+                        .join(" | ")
                 ));
                 for row in rows {
                     lines.push(format!("| {} |", row.join(" | ")));
@@ -75,7 +91,11 @@ pub struct Report {
 }
 
 impl Report {
-    pub fn new(command: impl Into<String>, title: impl Into<String>, sections: Vec<Section>) -> Self {
+    pub fn new(
+        command: impl Into<String>,
+        title: impl Into<String>,
+        sections: Vec<Section>,
+    ) -> Self {
         Self {
             command: command.into(),
             title: title.into(),
@@ -140,7 +160,11 @@ impl TuiCommandResponse {
 
     /// Build a response with partial data on error (e.g. create-and-send that failed mid-flight but
     /// still produced events/reports worth showing).
-    pub fn from_parts(events: Vec<WalletEvent>, reports: Vec<Report>, error: Option<String>) -> Self {
+    pub fn from_parts(
+        events: Vec<WalletEvent>,
+        reports: Vec<Report>,
+        error: Option<String>,
+    ) -> Self {
         Self {
             schema_version: TUI_OUTCOME_SCHEMA.to_string(),
             events,

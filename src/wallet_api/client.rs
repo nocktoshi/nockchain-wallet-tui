@@ -49,7 +49,13 @@ pub(crate) async fn run_command(
     api_token: &str,
     argv: Vec<String>,
 ) -> Result<TuiCommandResponse, String> {
-    post(api_listen, api_token, "/v1/wallet/command", serde_json::json!({ "argv": argv })).await
+    post(
+        api_listen,
+        api_token,
+        "/v1/wallet/command",
+        serde_json::json!({ "argv": argv }),
+    )
+    .await
 }
 
 /// Planner preview for a simple send (no kernel poke).
@@ -131,7 +137,13 @@ pub(crate) fn command_to_argv(cmd: &Commands) -> Vec<String> {
             label_prefix,
             out,
         } => {
-            push!("derive-child-batch", "--start-index", start_index, "--count", count);
+            push!(
+                "derive-child-batch",
+                "--start-index",
+                start_index,
+                "--count",
+                count
+            );
             if *hardened {
                 push!("--hardened");
             }
@@ -170,11 +182,23 @@ pub(crate) fn command_to_argv(cmd: &Commands) -> Vec<String> {
                 WatchSubcommand::Multisig {
                     threshold,
                     participants,
-                } => push!("multisig", "--threshold", threshold, "--participants", participants),
+                } => push!(
+                    "multisig",
+                    "--threshold",
+                    threshold,
+                    "--participants",
+                    participants
+                ),
                 WatchSubcommand::MultisigBatch {
                     threshold,
                     manifest,
-                } => push!("multisig-batch", "--threshold", threshold, "--manifest", manifest),
+                } => push!(
+                    "multisig-batch",
+                    "--threshold",
+                    threshold,
+                    "--manifest",
+                    manifest
+                ),
             }
         }
         Commands::ExportKeys => push!("export-keys"),
@@ -348,7 +372,9 @@ mod tests {
         };
         match roundtrip(&cmd) {
             Commands::ImportKeys {
-                seedphrase, version, ..
+                seedphrase,
+                version,
+                ..
             } => {
                 assert_eq!(seedphrase.as_deref(), Some("a b c"));
                 assert_eq!(version, Some(3));
@@ -367,10 +393,11 @@ mod tests {
         };
         match roundtrip(&cmd) {
             Commands::Watch {
-                subcommand: WatchSubcommand::Multisig {
-                    threshold,
-                    participants,
-                },
+                subcommand:
+                    WatchSubcommand::Multisig {
+                        threshold,
+                        participants,
+                    },
             } => {
                 assert_eq!(threshold, 2);
                 assert_eq!(participants, "a,b,c");

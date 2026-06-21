@@ -7,9 +7,9 @@ use tokio::sync::mpsc;
 
 use super::command_runner::{schedule_wallet_command, TuiRuntime};
 use super::create_tx::{CreateTxWizard, OptSub, Phase, RecSub};
-use crate::msg::Msg;
 use super::screens::{Screen, TuiControl};
 use super::store::{UIStore, UiAction};
+use crate::msg::Msg;
 use nockchain_wallet::command::NoteSelectionStrategyCli;
 use nockchain_wallet::recipient::{validate_blob_field, validate_memo_utf8, RecipientSpecToken};
 

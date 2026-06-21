@@ -7,18 +7,21 @@ use std::time::Instant;
 use ratatui::widgets::ListState;
 use tokio::sync::watch;
 
-use super::screens::Screen;
+use super::screens::{Overlay, RunningJob, Screen};
 use nockchain_wallet::command::Commands;
 
 /// Bottom status/output panel: visible while a command runs or meaningful output exists.
 pub(crate) fn status_modal_visible(state: &UiState) -> bool {
-    if let Screen::Running { restore, cmd, .. } = &state.screen {
-        if matches!(**restore, Screen::Receive { .. })
-            && matches!(cmd, Commands::ListActiveAddresses)
+    if let Some(job) = &state.job {
+        // Receive-address fetch and NNS create-tx draw full-panel; hide the status strip.
+        if matches!(state.screen, Screen::Receive { .. })
+            && matches!(job.cmd, Commands::ListActiveAddresses)
         {
             return false;
         }
-        if matches!(**restore, Screen::NnsBuy { .. }) && matches!(cmd, Commands::CreateTx { .. }) {
+        if matches!(state.screen, Screen::NnsBuy { .. })
+            && matches!(job.cmd, Commands::CreateTx { .. })
+        {
             return false;
         }
         return true;
@@ -73,11 +76,19 @@ impl Default for BalancePanelState {
 }
 
 pub(crate) struct UiState {
+    /// Active route (activity-panel content). Orthogonal to `job` and `overlay`.
     pub screen: Screen,
+    /// A modal (prompt/confirm/exit) drawn over the route, if any.
+    pub overlay: Option<Overlay>,
+    /// A wallet command in progress, if any — shown as a spinner over the current route.
+    pub job: Option<RunningJob>,
     pub toast: Option<String>,
     pub sync_progress: Option<watch::Receiver<(usize, usize)>>,
     /// Terminal text rendered from [`Self::last_command_events`] for the output panel.
     pub last_command_output: String,
+    /// Green ✓ success header for the output panel (set only on a command success *with* output;
+    /// `None` for info text like help/curl). Folds the success confirmation into the one panel.
+    pub last_command_status: Option<String>,
     /// Structured kernel events from the last wallet command (data layer).
     pub last_command_events: Vec<nockchain_wallet::wallet_outcome::WalletEvent>,
     /// Vertical scroll (wrapped lines) for the status/output panel.
@@ -102,9 +113,12 @@ impl UiState {
     pub fn new(screen: Screen) -> Self {
         Self {
             screen,
+            overlay: None,
+            job: None,
             toast: None,
             sync_progress: None,
             last_command_output: String::new(),
+            last_command_status: None,
             last_command_events: Vec::new(),
             output_scroll: 0,
             list_state: ListState::default(),

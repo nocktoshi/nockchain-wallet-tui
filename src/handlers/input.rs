@@ -3,7 +3,6 @@
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::app_state::status_modal_visible;
-use crate::screens::Screen;
 use crate::store::{UIStore, UiAction};
 
 /// ↑/↓ while the command-output modal is open (scroll clamp in `draw_ui`).
@@ -11,7 +10,7 @@ pub(super) fn try_output_scroll_keys(store: &mut UIStore, key: KeyEvent) -> bool
     if !status_modal_visible(&store.state) {
         return false;
     }
-    if matches!(store.state.screen, Screen::Running { .. }) {
+    if store.state.job.is_some() {
         return false;
     }
     const LINE_STEP: i32 = 3;

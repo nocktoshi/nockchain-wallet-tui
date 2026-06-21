@@ -105,10 +105,9 @@ mod tests {
             },
         );
         drop(tx);
-        let Screen::Running { label, .. } = &s.screen else {
-            panic!("expected Running");
-        };
-        assert_eq!(label, "first");
+        assert_eq!(s.job.as_ref().expect("expected job").label, "first");
+        // Screen stays on the route that launched the command.
+        assert!(matches!(s.screen, Screen::Home));
         let (tx2, rx2) = watch::channel((0usize, 5usize));
         apply_ui_action(
             &mut s,
@@ -119,10 +118,7 @@ mod tests {
             },
         );
         drop(tx2);
-        let Screen::Running { label: l2, .. } = &s.screen else {
-            panic!("expected Running");
-        };
-        assert_eq!(l2, "first");
+        assert_eq!(s.job.as_ref().expect("expected job").label, "first");
     }
 
     #[test]

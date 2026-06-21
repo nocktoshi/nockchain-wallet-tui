@@ -24,9 +24,15 @@ pub(crate) enum TuiApiRequest {
     /// Generic command from clap `argv` tokens.
     Command(Vec<String>),
     /// Planner preview for a simple send (no kernel poke, no file written).
-    PlanSimpleSend { recipient: String, amount_nicks: u64 },
+    PlanSimpleSend {
+        recipient: String,
+        amount_nicks: u64,
+    },
     /// Build + broadcast a simple send (create-tx then send-tx).
-    CreateAndSendSimple { recipient: String, amount_nicks: u64 },
+    CreateAndSendSimple {
+        recipient: String,
+        amount_nicks: u64,
+    },
     /// Register a `.nock` name: registry-payment create-tx then send-tx.
     NnsRegister { name: String },
 }
@@ -256,7 +262,10 @@ async fn post_nns_register(
 }
 
 fn bad_request(msg: String) -> (StatusCode, Json<TuiCommandResponse>) {
-    (StatusCode::BAD_REQUEST, Json(TuiCommandResponse::failure(msg)))
+    (
+        StatusCode::BAD_REQUEST,
+        Json(TuiCommandResponse::failure(msg)),
+    )
 }
 
 fn server_error(msg: &str) -> (StatusCode, Json<TuiCommandResponse>) {

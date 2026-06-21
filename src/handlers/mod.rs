@@ -20,8 +20,7 @@ use super::app_state::status_modal_visible;
 use super::command_runner::{NnsLookupCompletion, SendSimplePlanCompletion, TuiRuntime};
 use super::ct_dispatch;
 use super::hooks::terminal::Term;
-use super::prompt_overlay::has_prompt_overlay;
-use super::screens::{Screen, TuiControl};
+use super::screens::{Overlay, Screen, TuiControl};
 use super::store::{UIStore, UiAction};
 use crate::msg::Msg;
 use nockchain_wallet::command::Commands;
@@ -49,10 +48,7 @@ fn menu_sel(screen: &Screen) -> usize {
     }
 }
 
-pub(crate) fn apply_send_simple_plan_result(
-    store: &mut UIStore,
-    result: SendSimplePlanCompletion,
-) {
+pub(crate) fn apply_send_simple_plan_result(store: &mut UIStore, result: SendSimplePlanCompletion) {
     send_simple::apply_send_simple_plan_result(store, result);
 }
 
@@ -63,6 +59,11 @@ pub(crate) fn apply_nns_lookup_result(store: &mut UIStore, result: NnsLookupComp
 /// Route screen transitions through [`super::store::apply_ui_action`].
 pub(super) fn replace_screen(store: &mut UIStore, screen: Screen) {
     store.dispatch(UiAction::ReplaceScreen(screen));
+}
+
+/// Open (`Some`) or close (`None`) the modal overlay over the current route.
+pub(super) fn set_overlay(store: &mut UIStore, overlay: Option<Overlay>) {
+    store.state.overlay = overlay;
 }
 
 pub(super) async fn dispatch_key(
@@ -79,7 +80,7 @@ pub(super) async fn dispatch_key(
         store.dispatch(UiAction::TakeToast);
         return Ok(TuiControl::Continue);
     }
-    if matches!(store.state.screen, Screen::Running { .. }) {
+    if store.state.job.is_some() {
         return Ok(TuiControl::Continue);
     }
     if matches!(store.state.screen, Screen::Splash) {
@@ -88,10 +89,20 @@ pub(super) async fn dispatch_key(
         super::command_runner::schedule_price_fetch(store, msg_tx);
         return Ok(TuiControl::Continue);
     }
-    if status_modal_visible(&store.state)
-        && !has_prompt_overlay(&store.state.screen)
-        && !matches!(store.state.screen, Screen::Running { .. })
-    {
+    // A modal overlay intercepts all keys before the route handlers.
+    match &store.state.overlay {
+        Some(Overlay::Prompt { .. }) => {
+            return prompts::text_prompt(store, key, rt, terminal, msg_tx).await;
+        }
+        Some(Overlay::Confirm { .. }) => {
+            return prompts::confirm_prompt(store, key, rt, terminal, msg_tx).await;
+        }
+        Some(Overlay::ExitConfirm { .. }) => {
+            return menus::handle_exit_confirm(store, key);
+        }
+        None => {}
+    }
+    if status_modal_visible(&store.state) {
         if key.code == KeyCode::Enter {
             store.dispatch(UiAction::DismissStatusOutput);
             return Ok(TuiControl::Continue);
@@ -127,67 +138,89 @@ pub(super) async fn dispatch_key(
             }
             nns_buy::handle_nns_buy(store, key, rt, msg_tx).await
         }
-        Screen::SendSimple { .. } => {
-            send_simple::handle_send_simple(store, key, rt, msg_tx).await
-        }
+        Screen::SendSimple { .. } => send_simple::handle_send_simple(store, key, rt, msg_tx).await,
         Screen::Keys { .. } => {
             let s = menu_sel(&store.state.screen);
             Ok(menus::run_menu(
-                store, rt, msg_tx, key, s, crate::actions::KEYS_ITEMS,
-                |sel| Screen::Keys { sel }, Screen::Home,
+                store,
+                rt,
+                msg_tx,
+                key,
+                s,
+                crate::actions::KEYS_ITEMS,
+                |sel| Screen::Keys { sel },
+                Screen::Home,
             ))
         }
         Screen::KeysImport { .. } => {
             let s = menu_sel(&store.state.screen);
             Ok(menus::run_menu(
-                store, rt, msg_tx, key, s, crate::actions::KEYS_IMPORT_ITEMS,
-                |sel| Screen::KeysImport { sel }, Screen::Keys { sel: 2 },
+                store,
+                rt,
+                msg_tx,
+                key,
+                s,
+                crate::actions::KEYS_IMPORT_ITEMS,
+                |sel| Screen::KeysImport { sel },
+                Screen::Keys { sel: 2 },
             ))
         }
         Screen::Notes { .. } => {
             let s = menu_sel(&store.state.screen);
             Ok(menus::run_menu(
-                store, rt, msg_tx, key, s, crate::actions::NOTES_ITEMS,
-                |sel| Screen::Notes { sel }, Screen::Home,
+                store,
+                rt,
+                msg_tx,
+                key,
+                s,
+                crate::actions::NOTES_ITEMS,
+                |sel| Screen::Notes { sel },
+                Screen::Home,
             ))
         }
         Screen::Transactions { .. } => {
             let s = menu_sel(&store.state.screen);
             Ok(menus::run_menu(
-                store, rt, msg_tx, key, s, crate::actions::TX_ITEMS,
-                |sel| Screen::Transactions { sel }, Screen::Home,
+                store,
+                rt,
+                msg_tx,
+                key,
+                s,
+                crate::actions::TX_ITEMS,
+                |sel| Screen::Transactions { sel },
+                Screen::Home,
             ))
         }
         Screen::Watch { .. } => {
             let s = menu_sel(&store.state.screen);
             Ok(menus::run_menu(
-                store, rt, msg_tx, key, s, crate::actions::WATCH_ITEMS,
-                |sel| Screen::Watch { sel }, Screen::Home,
+                store,
+                rt,
+                msg_tx,
+                key,
+                s,
+                crate::actions::WATCH_ITEMS,
+                |sel| Screen::Watch { sel },
+                Screen::Home,
             ))
         }
         Screen::SignVerify { .. } => {
             let s = menu_sel(&store.state.screen);
             Ok(menus::run_menu(
-                store, rt, msg_tx, key, s, crate::actions::SIGN_ITEMS,
-                |sel| Screen::SignVerify { sel }, Screen::Home,
+                store,
+                rt,
+                msg_tx,
+                key,
+                s,
+                crate::actions::SIGN_ITEMS,
+                |sel| Screen::SignVerify { sel },
+                Screen::Home,
             ))
         }
         Screen::Settings { .. } => menus::handle_settings(store, key, rt),
-        Screen::Quick { .. } => menus::handle_quick(store, key),
-        Screen::TextPrompt { .. } => {
-            prompts::text_prompt(store, key, rt, terminal, msg_tx).await
-        }
-        Screen::Confirm { .. } => {
-            prompts::confirm_prompt(store, key, rt, terminal, msg_tx).await
-        }
-        Screen::CreateTx { .. } => {
-            ct_dispatch::handle_create_tx(store, key, rt, msg_tx).await
-        }
-        Screen::ExitConfirm { .. } => menus::handle_exit_confirm(store, key),
-        Screen::ErrorScreen { .. } => {
-            error::error_screen(store, key, rt, terminal, msg_tx).await
-        }
-        Screen::Running { .. } => Ok(TuiControl::Continue),
+        Screen::Quick { .. } => menus::handle_quick(store, key, rt, msg_tx),
+        Screen::CreateTx { .. } => ct_dispatch::handle_create_tx(store, key, rt, msg_tx).await,
+        Screen::ErrorScreen { .. } => error::error_screen(store, key, rt, terminal, msg_tx).await,
     };
 
     // After any handler (including menu navigation), if we are now on the NNS buy screen
@@ -224,15 +257,15 @@ pub(super) async fn dispatch_paste(
         super::command_runner::schedule_price_fetch(store, msg_tx);
         return Ok(TuiControl::Continue);
     }
-    match &mut store.state.screen {
-        Screen::TextPrompt { value, then, .. } => {
-            if super::paste::text_prompt_allows_multiline(then) {
-                super::paste::paste_multiline(value, &pasted);
-            } else {
-                super::paste::paste_single_line(value, &pasted);
-            }
-            Ok(TuiControl::Continue)
+    if let Some(Overlay::Prompt { value, then, .. }) = &mut store.state.overlay {
+        if super::paste::text_prompt_allows_multiline(then) {
+            super::paste::paste_multiline(value, &pasted);
+        } else {
+            super::paste::paste_single_line(value, &pasted);
         }
+        return Ok(TuiControl::Continue);
+    }
+    match &mut store.state.screen {
         Screen::Quick { line } => {
             super::paste::paste_single_line(line, &pasted);
             Ok(TuiControl::Continue)

@@ -258,7 +258,13 @@ async fn handle_send_simple_review(
             }
             SendSimpleFocus::Continue => {
                 if let Ok((to, amount_nicks)) = validate_send(&amount, &recipient) {
-                    schedule_send_simple_create_and_send(store, rt, done_tx.clone(), to, amount_nicks);
+                    schedule_send_simple_create_and_send(
+                        store,
+                        rt,
+                        done_tx.clone(),
+                        to,
+                        amount_nicks,
+                    );
                 }
                 return Ok(TuiControl::Continue);
             }

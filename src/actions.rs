@@ -14,10 +14,7 @@ pub(crate) enum MenuAction {
     /// Schedule a wallet command over the API (spinner label from [`command_label`]).
     Run(Commands),
     /// Open a text prompt that continues via [`TextThen`].
-    Prompt {
-        title: &'static str,
-        then: TextThen,
-    },
+    Prompt { title: &'static str, then: TextThen },
     /// Open a yes/no (or labelled) confirm that continues via [`ConfirmThen`].
     Confirm {
         title: &'static str,
@@ -225,7 +222,11 @@ pub(crate) const SIGN_ITEMS: &[MenuItem] = &[
         "Message to sign",
         TextThen::SignMsgStepMessage,
     ),
-    prompt("Verify message", "Message (plain text)", TextThen::VerifyMsgM),
+    prompt(
+        "Verify message",
+        "Message (plain text)",
+        TextThen::VerifyMsgM,
+    ),
     prompt("Sign hash", "Hash (base58)", TextThen::SignHashGetHash),
     prompt("Verify hash", "Hash (base58)", TextThen::VerifyHashFirst),
     goto("Back", ScreenTarget::Home),

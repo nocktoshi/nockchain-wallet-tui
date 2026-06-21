@@ -14,7 +14,6 @@ mod hooks;
 mod msg;
 mod nns;
 mod paste;
-mod prompt_overlay;
 mod screens;
 mod send_simple;
 mod session;

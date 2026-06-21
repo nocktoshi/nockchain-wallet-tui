@@ -9,15 +9,13 @@ use ratatui::Frame;
 use super::menus::BOOL;
 use super::theme::{THEME_ACCENT_GREEN, THEME_BG_DEEP, THEME_MUTED};
 use crate::app_state::AppState;
-use crate::screens::Screen;
+use crate::screens::Overlay;
 
-const PROMPT_BAR_LINES: u16 = 2;
+// Top border (1) + title (1) + input/options (1). With only 2, the `Borders::TOP` ate the input row.
+const PROMPT_BAR_LINES: u16 = 3;
 
-pub(crate) fn prompt_bar_height(screen: &Screen) -> u16 {
-    if matches!(
-        screen,
-        Screen::TextPrompt { .. } | Screen::Confirm { .. } | Screen::ExitConfirm { .. }
-    ) {
+pub(crate) fn prompt_bar_height(overlay: &Option<Overlay>) -> u16 {
+    if overlay.is_some() {
         PROMPT_BAR_LINES
     } else {
         0
@@ -35,13 +33,15 @@ pub(crate) fn draw_prompt_bar(f: &mut Frame<'_>, app: &AppState, area: Rect) {
     let inner = block.inner(area);
     f.render_widget(block, area);
 
-    match &app.screen {
-        Screen::TextPrompt { title, value, .. } => draw_text_prompt(f, inner, title, value),
-        Screen::Confirm {
+    match &app.overlay {
+        Some(Overlay::Prompt { title, value, .. }) => draw_text_prompt(f, inner, title, value),
+        Some(Overlay::Confirm {
             title, sel, labels, ..
-        } => draw_confirm_prompt(f, inner, title, labels, *sel),
-        Screen::ExitConfirm { sel, .. } => draw_confirm_prompt(f, inner, "Exit TUI?", BOOL, *sel),
-        _ => {}
+        }) => draw_confirm_prompt(f, inner, title, labels, *sel),
+        Some(Overlay::ExitConfirm { sel }) => {
+            draw_confirm_prompt(f, inner, "Exit TUI?", BOOL, *sel)
+        }
+        None => {}
     }
 }
 

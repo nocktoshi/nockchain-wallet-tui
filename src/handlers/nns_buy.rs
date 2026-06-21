@@ -120,7 +120,16 @@ pub(super) async fn handle_nns_buy(
                         status = Some(format!("Error: {e}"));
                         replace_screen(
                             store,
-                            make_nns_buy(value, cursor, focus, status, false, None, owned_names, false),
+                            make_nns_buy(
+                                value,
+                                cursor,
+                                focus,
+                                status,
+                                false,
+                                None,
+                                owned_names,
+                                false,
+                            ),
                         );
                         return Ok(TuiControl::Continue);
                     }
@@ -198,11 +207,7 @@ pub(super) async fn handle_nns_buy(
     Ok(TuiControl::Continue)
 }
 
-fn start_lookup(
-    store: &mut UIStore,
-    value: &str,
-    msg_tx: &mpsc::UnboundedSender<Msg>,
-) {
+fn start_lookup(store: &mut UIStore, value: &str, msg_tx: &mpsc::UnboundedSender<Msg>) {
     let Screen::NnsBuy {
         cursor,
         focus,

@@ -37,12 +37,7 @@ pub(super) async fn run(
 }
 
 /// Route one async completion to its reducer (and schedule any follow-up work).
-fn handle_msg(
-    store: &mut UIStore,
-    rt: &TuiRuntime,
-    msg: Msg,
-    msg_tx: &mpsc::UnboundedSender<Msg>,
-) {
+fn handle_msg(store: &mut UIStore, rt: &TuiRuntime, msg: Msg, msg_tx: &mpsc::UnboundedSender<Msg>) {
     match msg {
         Msg::Job((res, events, output)) => {
             command_runner::apply_job_result(store, res, events, output, msg_tx);

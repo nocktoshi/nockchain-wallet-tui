@@ -23,7 +23,9 @@ pub(crate) enum SendSimplePhase {
     Form,
     Planning,
     /// Planner preview returned by `/tx/plan`; the screen's amount+recipient drive the send.
-    Review { preview: String },
+    Review {
+        preview: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -98,25 +100,8 @@ pub(crate) enum Screen {
     Quick {
         line: String,
     },
-    TextPrompt {
-        underlay: Box<Screen>,
-        title: String,
-        value: String,
-        then: TextThen,
-    },
-    Confirm {
-        underlay: Box<Screen>,
-        title: String,
-        sel: usize,
-        labels: &'static [&'static str],
-        then: ConfirmThen,
-    },
     CreateTx {
         w: super::create_tx::CreateTxWizard,
-    },
-    ExitConfirm {
-        underlay: Box<Screen>,
-        sel: usize,
     },
     ErrorScreen {
         msg: String,
@@ -124,12 +109,60 @@ pub(crate) enum Screen {
         actions: &'static [&'static str],
         ctx: ErrorCtx,
     },
-    /// Wallet command in progress (async job); `restore` is the screen to return to on completion.
-    Running {
-        label: String,
-        restore: Box<Screen>,
-        cmd: Commands,
+}
+
+/// A wallet command in progress, held in `UiState::job` orthogonally to the active route. While a
+/// job runs the route stays put (it's where the command returns); the status panel shows a spinner.
+#[derive(Debug, Clone)]
+pub(crate) struct RunningJob {
+    pub label: String,
+    pub cmd: Commands,
+}
+
+/// A modal drawn over the current route (the route *is* the underlay). Held in `UiState::overlay`.
+#[derive(Debug, Clone)]
+pub(crate) enum Overlay {
+    Prompt {
+        title: String,
+        value: String,
+        then: TextThen,
     },
+    Confirm {
+        title: String,
+        sel: usize,
+        labels: &'static [&'static str],
+        then: ConfirmThen,
+    },
+    ExitConfirm {
+        sel: usize,
+    },
+}
+
+impl Overlay {
+    pub(crate) fn prompt(
+        title: impl Into<String>,
+        value: impl Into<String>,
+        then: TextThen,
+    ) -> Self {
+        Overlay::Prompt {
+            title: title.into(),
+            value: value.into(),
+            then,
+        }
+    }
+    pub(crate) fn confirm(
+        title: impl Into<String>,
+        sel: usize,
+        labels: &'static [&'static str],
+        then: ConfirmThen,
+    ) -> Self {
+        Overlay::Confirm {
+            title: title.into(),
+            sel,
+            labels,
+            then,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

@@ -7,18 +7,33 @@ use nockapp::NockAppError;
 use tokio::sync::{mpsc, Mutex};
 use tracing::warn;
 
-use super::input::{edit_line, esc_back, list_activate};
+use super::input::{edit_line, esc_back};
 use crate::command_runner::TuiRuntime;
-use crate::msg::Msg;
 use crate::components::menus::BOOL;
 use crate::hooks::terminal::Term;
-use crate::prompt_overlay::{
-    confirm_prompt_screen as overlay_confirm, text_prompt_screen as overlay_text,
-};
-use crate::screens::{ConfirmThen, Screen, TextThen, TuiControl};
+use crate::msg::Msg;
+use crate::screens::{ConfirmThen, Overlay, TextThen, TuiControl};
 use crate::store::UIStore;
 use crate::{session, wallet_api};
 use nockchain_wallet::command::{Commands, WatchSubcommand};
+
+fn overlay_text(title: impl Into<String>, value: impl Into<String>, then: TextThen) -> Overlay {
+    Overlay::prompt(title, value, then)
+}
+
+fn overlay_confirm(
+    title: impl Into<String>,
+    sel: usize,
+    labels: &'static [&'static str],
+    then: ConfirmThen,
+) -> Overlay {
+    Overlay::confirm(title, sel, labels, then)
+}
+
+/// Set the modal overlay over the current route.
+fn open(store: &mut UIStore, overlay: Overlay) {
+    super::set_overlay(store, Some(overlay));
+}
 
 pub(super) async fn text_prompt(
     store: &mut UIStore,
@@ -27,18 +42,16 @@ pub(super) async fn text_prompt(
     _terminal: &Arc<Mutex<Term>>,
     done_tx: &mpsc::UnboundedSender<Msg>,
 ) -> Result<TuiControl, NockAppError> {
-    let state = store.state.screen.clone();
-    let (underlay, title, mut value, then) = match state {
-        Screen::TextPrompt {
-            underlay,
-            title,
-            value,
-            then,
-        } => (underlay, title, value, then),
-        _other => return Ok(TuiControl::Continue),
+    let Some(Overlay::Prompt {
+        title,
+        mut value,
+        then,
+    }) = store.state.overlay.clone()
+    else {
+        return Ok(TuiControl::Continue);
     };
     if esc_back(key.code) {
-        super::replace_screen(store, *underlay);
+        super::set_overlay(store, None);
         return Ok(TuiControl::Continue);
     }
     if key.code == KeyCode::Enter {
@@ -46,10 +59,9 @@ pub(super) async fn text_prompt(
         match then {
             TextThen::KeysDeriveIndex => match v.parse::<u64>() {
                 Ok(index) => {
-                    super::replace_screen(
+                    open(
                         store,
                         overlay_confirm(
-                            (*underlay).clone(),
                             "Hardened?",
                             1,
                             BOOL,
@@ -102,10 +114,9 @@ pub(super) async fn text_prompt(
                 );
             }
             TextThen::KeysImportSeed => {
-                super::replace_screen(
+                open(
                     store,
                     overlay_text(
-                        (*underlay).clone(),
                         "Master key version (optional, u64)",
                         String::new(),
                         TextThen::KeysImportSeedVersion { seed: v },
@@ -120,10 +131,9 @@ pub(super) async fn text_prompt(
                         Ok(n) => Some(n),
                         Err(e) => {
                             warn!("Invalid version: {e}");
-                            super::replace_screen(
+                            open(
                                 store,
                                 overlay_text(
-                                    (*underlay).clone(),
                                     "Master key version (optional, u64)",
                                     v,
                                     TextThen::KeysImportSeedVersion { seed },
@@ -203,10 +213,9 @@ pub(super) async fn text_prompt(
                 );
             }
             TextThen::TxSignMultisigTxFile => {
-                super::replace_screen(
+                open(
                     store,
                     overlay_text(
-                        (*underlay).clone(),
                         "Sign keys (optional: index:hardened, comma-separated)",
                         String::new(),
                         TextThen::TxSignMultisigKeys { transaction: v },
@@ -227,10 +236,9 @@ pub(super) async fn text_prompt(
             }
             TextThen::TxMultisigThreshold => match v.parse::<u64>() {
                 Ok(threshold) => {
-                    super::replace_screen(
+                    open(
                         store,
                         overlay_text(
-                            (*underlay).clone(),
                             "Participants (comma-separated pubkey hashes)",
                             String::new(),
                             TextThen::TxMultisigParticipants { threshold },
@@ -272,7 +280,7 @@ pub(super) async fn text_prompt(
                             Ok(_) => {
                                 wallet_api::restart_api_server_if_listen_changed(rt, &old_listen);
                                 store.session_display = session::session_config_snapshot(rt);
-                                super::replace_screen(store, Screen::Settings { sel: 0 });
+                                super::set_overlay(store, None);
                             }
                             Err(e) => warn!("{e}"),
                         }
@@ -288,7 +296,7 @@ pub(super) async fn text_prompt(
                     Ok(_) => {
                         wallet_api::restart_api_server_if_listen_changed(rt, &old_listen);
                         store.session_display = session::session_config_snapshot(rt);
-                        super::replace_screen(store, Screen::Settings { sel: 0 });
+                        super::set_overlay(store, None);
                     }
                     Err(e) => warn!("{e}"),
                 }
@@ -316,10 +324,9 @@ pub(super) async fn text_prompt(
                 );
             }
             TextThen::SignMsgStepMessage => {
-                super::replace_screen(
+                open(
                     store,
                     overlay_text(
-                        (*underlay).clone(),
                         "Key index (optional, u64; empty = master)",
                         String::new(),
                         TextThen::SignMsgStepIndex { message: v },
@@ -334,10 +341,9 @@ pub(super) async fn text_prompt(
                         Ok(i) => Some(i),
                         Err(e) => {
                             warn!("Invalid index: {e}");
-                            super::replace_screen(
+                            open(
                                 store,
                                 overlay_text(
-                                    (*underlay).clone(),
                                     "Key index (optional, u64; empty = master)",
                                     v,
                                     TextThen::SignMsgStepIndex { message },
@@ -347,10 +353,9 @@ pub(super) async fn text_prompt(
                         }
                     }
                 };
-                super::replace_screen(
+                open(
                     store,
                     overlay_confirm(
-                        (*underlay).clone(),
                         "Hardened?",
                         1,
                         BOOL,
@@ -364,10 +369,9 @@ pub(super) async fn text_prompt(
                 );
             }
             TextThen::VerifyMsgM => {
-                super::replace_screen(
+                open(
                     store,
                     overlay_text(
-                        (*underlay).clone(),
                         "Path to signature file",
                         String::new(),
                         TextThen::VerifyMsgS { message: v },
@@ -375,10 +379,9 @@ pub(super) async fn text_prompt(
                 );
             }
             TextThen::VerifyMsgS { message } => {
-                super::replace_screen(
+                open(
                     store,
                     overlay_text(
-                        (*underlay).clone(),
                         "Public key (base58)",
                         String::new(),
                         TextThen::VerifyMsgP {
@@ -406,10 +409,9 @@ pub(super) async fn text_prompt(
                 );
             }
             TextThen::SignHashGetHash => {
-                super::replace_screen(
+                open(
                     store,
                     overlay_text(
-                        (*underlay).clone(),
                         "Key index (optional, u64)",
                         String::new(),
                         TextThen::SignHashIndex { hash_b58: v },
@@ -424,10 +426,9 @@ pub(super) async fn text_prompt(
                         Ok(i) => Some(i),
                         Err(e) => {
                             warn!("Invalid index: {e}");
-                            super::replace_screen(
+                            open(
                                 store,
                                 overlay_text(
-                                    (*underlay).clone(),
                                     "Key index (optional, u64)",
                                     v,
                                     TextThen::SignHashIndex { hash_b58 },
@@ -437,10 +438,9 @@ pub(super) async fn text_prompt(
                         }
                     }
                 };
-                super::replace_screen(
+                open(
                     store,
                     overlay_confirm(
-                        (*underlay).clone(),
                         "Hardened?",
                         1,
                         BOOL,
@@ -449,10 +449,9 @@ pub(super) async fn text_prompt(
                 );
             }
             TextThen::VerifyHashFirst => {
-                super::replace_screen(
+                open(
                     store,
                     overlay_text(
-                        (*underlay).clone(),
                         "Path to signature file",
                         String::new(),
                         TextThen::VerifyHashSig { hash_b58: v },
@@ -460,10 +459,9 @@ pub(super) async fn text_prompt(
                 );
             }
             TextThen::VerifyHashSig { hash_b58 } => {
-                super::replace_screen(
+                open(
                     store,
                     overlay_text(
-                        (*underlay).clone(),
                         "Public key (base58)",
                         String::new(),
                         TextThen::VerifyHashPk {
@@ -491,15 +489,7 @@ pub(super) async fn text_prompt(
         }
     } else {
         edit_line(&mut value, key);
-        super::replace_screen(
-            store,
-            Screen::TextPrompt {
-                underlay,
-                title,
-                value,
-                then,
-            },
-        );
+        open(store, overlay_text(title, value, then));
     }
     Ok(TuiControl::Continue)
 }
@@ -511,96 +501,100 @@ pub(super) async fn confirm_prompt(
     _terminal: &Arc<Mutex<Term>>,
     done_tx: &mpsc::UnboundedSender<Msg>,
 ) -> Result<TuiControl, NockAppError> {
-    let state = store.state.screen.clone();
-    let (underlay, title, mut sel, labels, then) = match state {
-        Screen::Confirm {
-            underlay,
-            title,
-            sel,
-            labels,
-            then,
-        } => (underlay, title, sel, labels, then),
-        _ => return Ok(TuiControl::Continue),
+    let Some(Overlay::Confirm {
+        title,
+        mut sel,
+        labels,
+        then,
+    }) = store.state.overlay.clone()
+    else {
+        return Ok(TuiControl::Continue);
     };
     if esc_back(key.code) {
-        super::replace_screen(store, *underlay);
+        super::set_overlay(store, None);
         return Ok(TuiControl::Continue);
     }
-    match list_activate(&mut sel, labels.len(), key.code) {
-        Err(()) | Ok(None) => {
-            super::replace_screen(
-                store,
-                Screen::Confirm {
-                    underlay,
-                    title,
-                    sel,
-                    labels,
-                    then,
-                },
-            );
-            Ok(TuiControl::Continue)
+    let n = labels.len();
+    // Arrows (either axis) move the highlight; Enter confirms it; a label's first letter confirms
+    // that option directly (e.g. `y`/`n`).
+    let chosen: Option<usize> = match key.code {
+        KeyCode::Left | KeyCode::Up => {
+            sel = (sel + n - 1) % n;
+            None
         }
-        Ok(Some(i)) => {
-            match then {
-                ConfirmThen::KeysDeriveAfterIndex { index } => {
-                    let hardened = i == 0;
-                    super::replace_screen(
-                        store,
-                        overlay_text(
-                            (*underlay).clone(),
-                            "Label (optional)",
-                            String::new(),
-                            TextThen::KeysDeriveRun { index, hardened },
-                        ),
-                    );
-                }
-                ConfirmThen::KeysKeyTree => {
-                    let include_values = i == 0;
-                    super::schedule_cmd(
-                        store,
-                        rt,
-                        done_tx,
-                        Commands::ShowKeyTree { include_values },
-                        "ShowKeyTree",
-                    );
-                }
-                ConfirmThen::SignMsgHardened {
+        KeyCode::Right | KeyCode::Down => {
+            sel = (sel + 1) % n;
+            None
+        }
+        KeyCode::Enter => Some(sel),
+        KeyCode::Char(c) => labels.iter().position(|l| {
+            l.chars()
+                .next()
+                .is_some_and(|fc| fc.eq_ignore_ascii_case(&c))
+        }),
+        _ => None,
+    };
+    let Some(i) = chosen else {
+        open(store, overlay_confirm(title, sel, labels, then));
+        return Ok(TuiControl::Continue);
+    };
+    match then {
+        ConfirmThen::KeysDeriveAfterIndex { index } => {
+            let hardened = i == 0;
+            open(
+                store,
+                overlay_text(
+                    "Label (optional)",
+                    String::new(),
+                    TextThen::KeysDeriveRun { index, hardened },
+                ),
+            );
+        }
+        ConfirmThen::KeysKeyTree => {
+            let include_values = i == 0;
+            super::schedule_cmd(
+                store,
+                rt,
+                done_tx,
+                Commands::ShowKeyTree { include_values },
+                "ShowKeyTree",
+            );
+        }
+        ConfirmThen::SignMsgHardened {
+            message,
+            message_file,
+            message_pos,
+            index,
+        } => {
+            let hardened = i == 0;
+            super::schedule_cmd(
+                store,
+                rt,
+                done_tx,
+                Commands::SignMessage {
                     message,
                     message_file,
                     message_pos,
                     index,
-                } => {
-                    let hardened = i == 0;
-                    super::schedule_cmd(
-                        store,
-                        rt,
-                        done_tx,
-                        Commands::SignMessage {
-                            message,
-                            message_file,
-                            message_pos,
-                            index,
-                            hardened,
-                        },
-                        "SignMessage",
-                    );
-                }
-                ConfirmThen::SignHashHardened { hash_b58, index } => {
-                    let hardened = i == 0;
-                    super::schedule_cmd(
-                        store,
-                        rt,
-                        done_tx,
-                        Commands::SignHash {
-                            hash_b58,
-                            index,
-                            hardened,
-                        },
-                        "SignHash",
-                    );
-                }
-            }
-            Ok(TuiControl::Continue)
+                    hardened,
+                },
+                "SignMessage",
+            );
+        }
+        ConfirmThen::SignHashHardened { hash_b58, index } => {
+            let hardened = i == 0;
+            super::schedule_cmd(
+                store,
+                rt,
+                done_tx,
+                Commands::SignHash {
+                    hash_b58,
+                    index,
+                    hardened,
+                },
+                "SignHash",
+            );
         }
     }
+    Ok(TuiControl::Continue)
 }

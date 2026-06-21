@@ -126,10 +126,7 @@ pub(crate) fn command_name(cmd: &Commands) -> &'static str {
 }
 
 fn nicks_with_nock(nicks: u64) -> String {
-    format!(
-        "{} ({nicks} nicks)",
-        format_nock_from_nicks(nicks as u128)
-    )
+    format!("{} ({nicks} nicks)", format_nock_from_nicks(nicks as u128))
 }
 
 fn report_from_event(command: &str, event: &WalletEvent) -> Report {
@@ -156,8 +153,16 @@ fn report_from_event(command: &str, event: &WalletEvent) -> Report {
             block_id_b58,
             filter_address,
             rows,
-        } => report_notes(command, *height, block_id_b58, filter_address.as_deref(), rows),
-        WalletEvent::AddressListV1 { list_kind, rows } => report_addresses(command, list_kind, rows),
+        } => report_notes(
+            command,
+            *height,
+            block_id_b58,
+            filter_address.as_deref(),
+            rows,
+        ),
+        WalletEvent::AddressListV1 { list_kind, rows } => {
+            report_addresses(command, list_kind, rows)
+        }
         WalletEvent::KeyTreeV1 {
             include_values,
             nodes,
@@ -202,7 +207,9 @@ fn report_from_event(command: &str, event: &WalletEvent) -> Report {
             blob,
             tx_paths,
         } => report_nns(command, name, *fee_nicks, blob, tx_paths),
-        WalletEvent::CreateTxV1 { tx_paths, summary } => report_create_tx(command, tx_paths, summary),
+        WalletEvent::CreateTxV1 { tx_paths, summary } => {
+            report_create_tx(command, tx_paths, summary)
+        }
     }
 }
 
@@ -247,7 +254,10 @@ fn report_notes(
 fn report_addresses(command: &str, list_kind: &str, rows: &[WalletAddressRowV1]) -> Report {
     let mut sections = vec![Section::kv("count", rows.len().to_string())];
     for row in rows {
-        sections.push(Section::kv(format!("v{}", row.version), row.address_b58.clone()));
+        sections.push(Section::kv(
+            format!("v{}", row.version),
+            row.address_b58.clone(),
+        ));
     }
     Report::new(command, format!("Addresses ({list_kind})"), sections)
 }
@@ -315,7 +325,10 @@ fn report_migrate(
             _ => {
                 sections.push(Section::kv("result", "skipped"));
                 if let Some(fee) = signer.fee {
-                    sections.push(Section::kv("fee estimate", format_nock_from_nicks(fee as u128)));
+                    sections.push(Section::kv(
+                        "fee estimate",
+                        format_nock_from_nicks(fee as u128),
+                    ));
                 }
                 if let Some(reason) = &signer.skip_reason {
                     sections.push(Section::kv("skip reason", reason.clone()));
@@ -326,7 +339,13 @@ fn report_migrate(
     Report::new(command, "V0 migration sweep", sections)
 }
 
-fn report_nns(command: &str, name: &str, fee_nicks: u64, blob: &str, tx_paths: &[String]) -> Report {
+fn report_nns(
+    command: &str,
+    name: &str,
+    fee_nicks: u64,
+    blob: &str,
+    tx_paths: &[String],
+) -> Report {
     let fee_nocks = fee_nicks as f64 / NICKS_PER_NOCK;
     let mut sections = vec![
         Section::kv("name", name.to_string()),
@@ -360,7 +379,11 @@ fn report_create_tx(command: &str, tx_paths: &[String], summary: &str) -> Report
 
 fn report_from_markdown(cmd: &Commands, markdown: &str) -> Report {
     let title = title_for_command(cmd);
-    Report::new(command_name(cmd), title, parse_markdown_to_sections(markdown))
+    Report::new(
+        command_name(cmd),
+        title,
+        parse_markdown_to_sections(markdown),
+    )
 }
 
 fn title_for_command(cmd: &Commands) -> String {
@@ -492,7 +515,10 @@ mod tests {
         match events.as_slice() {
             [WalletEvent::AddressListV1 { rows, .. }] => {
                 assert_eq!(rows.len(), 1);
-                assert_eq!(rows[0].address_b58, "9yPePjfWAdUnzaQKyxcRXKRa5PpUzKKEwtpECBZsUYt9Jd7egSDEWoV");
+                assert_eq!(
+                    rows[0].address_b58,
+                    "9yPePjfWAdUnzaQKyxcRXKRa5PpUzKKEwtpECBZsUYt9Jd7egSDEWoV"
+                );
                 assert_eq!(rows[0].version, 1);
             }
             other => panic!("expected one AddressListV1, got {other:?}"),
@@ -501,7 +527,11 @@ mod tests {
 
     #[test]
     fn markdown_only_command_produces_report() {
-        let reports = normalize(&[], "## Seed phrase\n- words: alpha bravo", &Commands::ShowSeedphrase);
+        let reports = normalize(
+            &[],
+            "## Seed phrase\n- words: alpha bravo",
+            &Commands::ShowSeedphrase,
+        );
         assert_eq!(reports.len(), 1);
         assert_eq!(reports[0].command, "show-seedphrase");
         assert_eq!(reports[0].title, "Show Seedphrase");

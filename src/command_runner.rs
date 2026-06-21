@@ -151,7 +151,7 @@ pub(crate) fn schedule_wallet_command(
     cmd: Commands,
     label: impl Into<String>,
 ) {
-    if matches!(store.state.screen, Screen::Running { .. }) {
+    if store.state.job.is_some() {
         return;
     }
     let label_s = label.into();
@@ -237,10 +237,7 @@ pub(crate) fn apply_balance_sidebar_result(
 }
 
 /// Resolve primary `.nock` name for an address already shown on home/receive.
-pub(crate) fn schedule_nockname_resolve(
-    address: String,
-    done_tx: &mpsc::UnboundedSender<Msg>,
-) {
+pub(crate) fn schedule_nockname_resolve(address: String, done_tx: &mpsc::UnboundedSender<Msg>) {
     let tx = done_tx.clone();
     tokio::task::spawn_local(async move {
         let nockname = crate::nns::resolve_primary_name(&address)
@@ -308,14 +305,12 @@ pub(crate) fn apply_job_result(
     output: String,
     identity_done_tx: &mpsc::UnboundedSender<Msg>,
 ) {
-    let receive_fetch = matches!(
-        &store.state.screen,
-        Screen::Running {
-            cmd: Commands::ListActiveAddresses,
-            restore,
-            ..
-        } if matches!(**restore, Screen::Receive { .. })
-    );
+    let receive_fetch = store
+        .state
+        .job
+        .as_ref()
+        .is_some_and(|j| matches!(j.cmd, Commands::ListActiveAddresses))
+        && matches!(store.state.screen, Screen::Receive { .. });
     let ok = result.is_ok();
     store.dispatch(UiAction::JobCompleted {
         result,
@@ -354,8 +349,13 @@ pub(crate) fn schedule_send_simple_plan(
 ) {
     tokio::task::spawn_local(async move {
         let listen = crate::session::current_api_listen(&rt);
-        let resp =
-            plan_simple_send(&listen, rt.api_auth_token.as_ref(), &recipient, amount_nicks).await;
+        let resp = plan_simple_send(
+            &listen,
+            rt.api_auth_token.as_ref(),
+            &recipient,
+            amount_nicks,
+        )
+        .await;
         let result = match resp {
             Ok(r) if r.error.is_none() => Ok(reports_to_text(&r.reports)),
             Ok(r) => Err(r.error.unwrap_or_else(|| "Planning failed".into())),
@@ -430,7 +430,7 @@ pub(crate) fn schedule_send_simple_create_and_send(
     recipient: String,
     amount_nicks: u64,
 ) {
-    if matches!(store.state.screen, Screen::Running { .. }) {
+    if store.state.job.is_some() {
         return;
     }
     let cmd = match crate::send_simple::build_simple_send_tx(&recipient, amount_nicks) {
@@ -449,9 +449,13 @@ pub(crate) fn schedule_send_simple_create_and_send(
     let rt = rt.clone();
     tokio::task::spawn_local(async move {
         let listen = crate::session::current_api_listen(&rt);
-        let resp =
-            create_and_send_simple(&listen, rt.api_auth_token.as_ref(), &recipient, amount_nicks)
-                .await;
+        let resp = create_and_send_simple(
+            &listen,
+            rt.api_auth_token.as_ref(),
+            &recipient,
+            amount_nicks,
+        )
+        .await;
         let _ = done_tx.send(Msg::Job(http_completion(resp)));
     });
 }
@@ -463,7 +467,7 @@ pub(crate) fn schedule_nns_register(
     done_tx: mpsc::UnboundedSender<Msg>,
     canonical_name: &str,
 ) -> Result<(), String> {
-    if matches!(store.state.screen, Screen::Running { .. }) {
+    if store.state.job.is_some() {
         return Ok(());
     }
     let recipient = crate::nns::build_registry_recipient(canonical_name)?;
@@ -556,7 +560,10 @@ fn parse_tx_paths_from_markdown(markdown: &str) -> Vec<String> {
 }
 
 /// Spawn CoinGecko price fetch (result delivered as [`Msg::Price`]).
-pub(crate) fn schedule_price_fetch(store: &mut UIStore, price_done_tx: &mpsc::UnboundedSender<Msg>) {
+pub(crate) fn schedule_price_fetch(
+    store: &mut UIStore,
+    price_done_tx: &mpsc::UnboundedSender<Msg>,
+) {
     use super::store::price_fetch_stale;
 
     if store.state.price.loading {

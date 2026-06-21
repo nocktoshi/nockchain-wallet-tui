@@ -6,8 +6,7 @@ use nockapp::NockAppError;
 
 use super::super::app_state::UiState;
 use super::super::components::menus::{CT_ERR_ACTIONS, GENERIC_ERR};
-use super::super::prompt_overlay::running_restore_screen;
-use super::super::screens::{ErrorCtx, Screen};
+use super::super::screens::{ErrorCtx, RunningJob, Screen};
 use super::super::view;
 use super::action::UiAction;
 use nockchain_wallet::command::Commands;
@@ -26,6 +25,7 @@ pub(crate) fn apply_ui_action(state: &mut UiState, action: UiAction) {
         UiAction::DismissStatusOutput => {
             state.last_command_output.clear();
             state.last_command_events.clear();
+            state.last_command_status = None;
             state.output_scroll = 0;
         }
         UiAction::ReplaceScreen(s) => {
@@ -40,21 +40,14 @@ pub(crate) fn apply_ui_action(state: &mut UiState, action: UiAction) {
             label,
             progress_rx,
         } => {
-            if matches!(state.screen, Screen::Running { .. }) {
+            if state.job.is_some() {
                 return;
             }
             state.balance_job_nonce = state.balance_job_nonce.wrapping_add(1);
             state.balance_panel.loading = false;
-            let resume = Box::new(running_restore_screen(std::mem::replace(
-                &mut state.screen,
-                Screen::Home,
-            )));
-            let cmd_clone = cmd.clone();
-            state.screen = Screen::Running {
-                label,
-                restore: resume,
-                cmd: cmd_clone,
-            };
+            // A command launched from a prompt consumes that overlay; the route stays put.
+            state.overlay = None;
+            state.job = Some(RunningJob { label, cmd });
             state.sync_progress = progress_rx;
         }
         UiAction::BeginBalanceSidebarFetch { progress_rx } => {
@@ -171,7 +164,7 @@ fn apply_balance_sidebar_completed(
     if nonce != state.balance_job_nonce {
         return;
     }
-    if matches!(state.screen, Screen::Running { .. }) {
+    if state.job.is_some() {
         return;
     }
     let display = view::render_balance_sidebar(&events);
@@ -202,84 +195,89 @@ fn apply_job_completed(
 ) {
     state.sync_progress = None;
     state.last_command_events = events.clone();
+    state.last_command_status = None;
     let display = output;
-    let placeholder = Screen::Home;
-    let taken = std::mem::replace(&mut state.screen, placeholder);
-    match taken {
-        Screen::Running { restore, cmd, .. } => {
-            let receive_fetch = matches!(&cmd, Commands::ListActiveAddresses)
-                && matches!(*restore, Screen::Receive { .. });
-            match result {
-                Ok(()) => {
-                    if receive_fetch || display.is_empty() {
-                        state.last_command_output.clear();
-                    } else {
-                        state.last_command_output = display.clone();
-                        state.output_scroll = 0;
+    // The route stayed put while the job ran; transition it now based on the command.
+    let Some(cmd) = state.job.take().map(|j| j.cmd) else {
+        return;
+    };
+    let receive_fetch = matches!(&cmd, Commands::ListActiveAddresses)
+        && matches!(state.screen, Screen::Receive { .. });
+    match result {
+        Ok(()) => {
+            let has_output = !receive_fetch && !display.is_empty();
+            if has_output {
+                state.last_command_output = display.clone();
+                state.output_scroll = 0;
+            } else {
+                state.last_command_output.clear();
+            }
+
+            // Route transition + the success message for this command.
+            let mut success_msg = success_line(&cmd);
+            if matches!(&cmd, Commands::CreateTx { .. }) {
+                state.screen = match &state.screen {
+                    Screen::SendSimple { .. } => {
+                        success_msg = "Transaction created and sent.".into();
+                        Screen::Home
                     }
-                    state.screen = match *restore {
-                        Screen::SendSimple { .. } if matches!(&cmd, Commands::CreateTx { .. }) => {
-                            state.toast = Some("Transaction created and sent.".into());
-                            Screen::Home
-                        }
-                        Screen::NnsBuy { .. } if matches!(&cmd, Commands::CreateTx { .. }) => {
-                            state.toast = Some("Name registration sent.".into());
-                            Screen::Home
-                        }
-                        _ if matches!(&cmd, Commands::CreateTx { .. }) => {
-                            Screen::Transactions { sel: 0 }
-                        }
-                        other => other,
-                    };
-                    if receive_fetch {
-                        apply_receive_address_if_needed(state, &cmd, &events);
+                    Screen::NnsBuy { .. } => {
+                        success_msg = "Name registration sent.".into();
+                        Screen::Home
                     }
-                    if matches!(&cmd, Commands::ShowBalance) {
-                        state.balance_panel.text = view::render_balance_sidebar(&events);
-                        state.balance_panel.events = events.clone();
-                        state.balance_panel.error = None;
-                        state.balance_panel.scroll = 0;
-                    }
-                    if state.toast.is_none() && !receive_fetch {
-                        state.toast = Some(success_line(&cmd));
-                    }
-                }
-                Err(e) => {
-                    let out = if !display.is_empty() {
-                        format!("{display}\n\n--- error ---\n{e}")
-                    } else {
-                        e.to_string()
-                    };
-                    if receive_fetch || out.is_empty() {
-                        state.last_command_output.clear();
-                    } else {
-                        state.last_command_output = out;
-                        state.output_scroll = 0;
-                    }
-                    if matches!(&cmd, Commands::ShowBalance) {
-                        state.balance_panel.error = Some(e.to_string());
-                        if !display.is_empty() {
-                            state.balance_panel.text = format!("{display}\n\n--- error ---\n{e}");
-                        }
-                    }
-                    if receive_fetch {
-                        if let Screen::Receive { error, loading, .. } = &mut state.screen {
-                            *loading = false;
-                            *error = Some(e.to_string());
-                        }
-                    } else {
-                        state.screen = Screen::ErrorScreen {
-                            msg: e.to_string(),
-                            sel: 0,
-                            actions: error_actions_for_command(&cmd),
-                            ctx: error_ctx_for_command(&cmd),
-                        };
-                    }
+                    _ => Screen::Transactions { sel: 0 },
+                };
+            }
+            if receive_fetch {
+                apply_receive_address_if_needed(state, &cmd, &events);
+            }
+            if matches!(&cmd, Commands::ShowBalance) {
+                state.balance_panel.text = view::render_balance_sidebar(&events);
+                state.balance_panel.events = events.clone();
+                state.balance_panel.error = None;
+                state.balance_panel.scroll = 0;
+            }
+            // One confirmation: a green ✓ header on the output panel when there's output to scroll,
+            // otherwise a floating toast — never both.
+            if !receive_fetch {
+                if has_output {
+                    state.last_command_status = Some(success_msg);
+                } else {
+                    state.toast = Some(success_msg);
                 }
             }
         }
-        other => {
-            state.screen = other;
+        Err(e) => {
+            let out = if !display.is_empty() {
+                format!("{display}\n\n--- error ---\n{e}")
+            } else {
+                e.to_string()
+            };
+            if receive_fetch || out.is_empty() {
+                state.last_command_output.clear();
+            } else {
+                state.last_command_output = out;
+                state.output_scroll = 0;
+            }
+            if matches!(&cmd, Commands::ShowBalance) {
+                state.balance_panel.error = Some(e.to_string());
+                if !display.is_empty() {
+                    state.balance_panel.text = format!("{display}\n\n--- error ---\n{e}");
+                }
+            }
+            if receive_fetch {
+                if let Screen::Receive { error, loading, .. } = &mut state.screen {
+                    *loading = false;
+                    *error = Some(e.to_string());
+                }
+            } else {
+                state.screen = Screen::ErrorScreen {
+                    msg: e.to_string(),
+                    sel: 0,
+                    actions: error_actions_for_command(&cmd),
+                    ctx: error_ctx_for_command(&cmd),
+                };
+            }
         }
     }
 }
