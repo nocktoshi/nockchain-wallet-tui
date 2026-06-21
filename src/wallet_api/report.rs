@@ -41,9 +41,6 @@ impl Section {
             value: value.into(),
         }
     }
-    pub fn raw(text: impl Into<String>) -> Self {
-        Section::Raw { text: text.into() }
-    }
 
     /// Flatten one section to terminal text lines.
     fn to_text(&self) -> String {

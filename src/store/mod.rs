@@ -101,7 +101,7 @@ mod tests {
             UiAction::EnterRunningWalletJob {
                 cmd: Commands::ShowBalance,
                 label: "first".into(),
-                progress_rx: rx,
+                progress_rx: Some(rx),
             },
         );
         drop(tx);
@@ -115,7 +115,7 @@ mod tests {
             UiAction::EnterRunningWalletJob {
                 cmd: Commands::ShowBalance,
                 label: "second".into(),
-                progress_rx: rx2,
+                progress_rx: Some(rx2),
             },
         );
         drop(tx2);
@@ -134,7 +134,7 @@ mod tests {
             UiAction::EnterRunningWalletJob {
                 cmd: Commands::ListNotes,
                 label: "run".into(),
-                progress_rx: rx,
+                progress_rx: Some(rx),
             },
         );
         drop(tx);
@@ -143,7 +143,7 @@ mod tests {
             UiAction::JobCompleted {
                 result: Ok(()),
                 events: vec![],
-                markdown: String::new(),
+                output: String::new(),
             },
         );
         assert!(matches!(s.screen, Screen::Home));

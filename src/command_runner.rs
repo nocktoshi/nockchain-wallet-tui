@@ -10,7 +10,9 @@ use tokio::sync::{mpsc, watch, Mutex};
 
 use super::screens::Screen;
 use super::store::{UIStore, UiAction};
-use crate::wallet_api::{TuiApiJob, WalletSessionState};
+use crate::wallet_api::{
+    command_to_argv, normalize, reports_to_text, run_command_http, TuiApiJob, WalletSessionState,
+};
 use nockchain_wallet::command::Commands;
 use nockchain_wallet::dispatch::execute_wallet_command;
 use nockchain_wallet::wallet_outcome::{WalletCommandData, WalletEvent};
@@ -38,8 +40,9 @@ async fn snapshot_wallet_events(
     sink.lock().unwrap().clone()
 }
 
-/// Job completion: command result, structured events, and captured kernel `%markdown`.
-pub(crate) type JobCompletion = (Result<(), NockAppError>, Vec<WalletEvent>, String);
+/// Job completion: command result (error string), structured events, and the **rendered report
+/// text** for the output panel (normalized server-side; never raw kernel markdown).
+pub(crate) type JobCompletion = (Result<(), String>, Vec<WalletEvent>, String);
 
 /// Background balance sidebar refresh (same `ShowBalance` path as the menu; does not use [`Screen::Running`]).
 pub(crate) type BalanceRefreshCompletion = (u64, Result<(), NockAppError>, Vec<WalletEvent>);
@@ -149,27 +152,35 @@ pub(crate) fn schedule_wallet_command(
     if matches!(store.state.screen, Screen::Running { .. }) {
         return;
     }
-    rt.wallet_event_sink.lock().unwrap().clear();
-    let (progress_tx, progress_rx) = watch::channel((0usize, 5usize));
-    let cmd_clone = cmd.clone();
     let label_s = label.into();
     store.dispatch(UiAction::EnterRunningWalletJob {
-        cmd: cmd_clone.clone(),
+        cmd: cmd.clone(),
         label: label_s,
-        progress_rx,
+        progress_rx: None,
     });
 
     let rt = rt.clone();
     tokio::task::spawn_local(async move {
-        let outcome = run_command_on_runtime(&rt, cmd_clone, Some(progress_tx), None).await;
-        let events = outcome
-            .as_ref()
-            .map(|d| d.events.clone())
-            .unwrap_or_default();
-        let markdown = rt.tui_markdown_sink.lock().unwrap().clone();
-        let exec_result = outcome.map(|_| ());
-        let _ = done_tx.send((exec_result, events, markdown));
+        let _ = done_tx.send(run_command_via_api(&rt, &cmd).await);
     });
+}
+
+/// Execute a simple command through the loopback HTTP API — the TUI is a client of its own API,
+/// exactly like a web UI. The wallet itself is only touched by the API executor.
+async fn run_command_via_api(rt: &TuiRuntime, cmd: &Commands) -> JobCompletion {
+    let listen = crate::session::current_api_listen(rt);
+    let argv = command_to_argv(cmd);
+    match run_command_http(&listen, rt.api_auth_token.as_ref(), argv).await {
+        Ok(resp) => {
+            let output = reports_to_text(&resp.reports);
+            let result = match resp.error {
+                Some(e) => Err(e),
+                None => Ok(()),
+            };
+            (result, resp.events, output)
+        }
+        Err(transport) => (Err(transport), Vec::new(), String::new()),
+    }
 }
 
 /// Refresh balance text for the main-menu sidebar (does not swap to [`Screen::Running`]).
@@ -261,8 +272,7 @@ pub(crate) fn schedule_home_identity_fetch(
             .as_ref()
             .map(|d| d.events.clone())
             .unwrap_or_default();
-        let markdown = rt.tui_markdown_sink.lock().unwrap().clone();
-        let address = super::view::first_active_address_from_output(&events, &markdown);
+        let address = super::view::first_active_address(&events);
         let nockname = match address.as_deref() {
             Some(a) => crate::nns::resolve_primary_name(a).await.ok().flatten(),
             None => None,
@@ -281,9 +291,9 @@ pub(crate) fn apply_home_identity_result(
 
 pub(crate) fn apply_job_result(
     store: &mut UIStore,
-    result: Result<(), NockAppError>,
+    result: Result<(), String>,
     events: Vec<WalletEvent>,
-    markdown: String,
+    output: String,
     identity_done_tx: &mpsc::UnboundedSender<HomeIdentityCompletion>,
 ) {
     let receive_fetch = matches!(
@@ -298,7 +308,7 @@ pub(crate) fn apply_job_result(
     store.dispatch(UiAction::JobCompleted {
         result,
         events,
-        markdown,
+        output,
     });
     if receive_fetch && ok {
         if let Some(addr) = store.state.balance_panel.address.clone() {
@@ -346,6 +356,19 @@ pub(crate) fn schedule_send_simple_plan(
     });
 }
 
+/// Build a [`JobCompletion`] from an in-process outcome by normalizing events + captured markdown
+/// into report text (same server-side normalizer the HTTP path uses, so the output panel is
+/// consistent regardless of which path ran).
+fn completion(
+    result: Result<(), NockAppError>,
+    events: Vec<WalletEvent>,
+    markdown: &str,
+    cmd: &Commands,
+) -> JobCompletion {
+    let output = reports_to_text(&normalize(&events, markdown, cmd));
+    (result.map_err(|e| e.to_string()), events, output)
+}
+
 /// Create the transaction file, then broadcast each with `send-tx`.
 pub(crate) fn schedule_create_and_send(
     store: &mut UIStore,
@@ -364,15 +387,16 @@ pub(crate) fn schedule_create_and_send(
     store.dispatch(UiAction::EnterRunningWalletJob {
         cmd: cmd_clone,
         label: label.into(),
-        progress_rx,
+        progress_rx: Some(progress_rx),
     });
 
     let rt = rt.clone();
     tokio::task::spawn_local(async move {
+        let norm_cmd = create_cmd.clone();
         let before = match Wallet::snapshot_written_txs(Path::new(TX_DIR)).await {
             Ok(s) => s,
             Err(e) => {
-                let _ = done_tx.send((Err(e), Vec::new(), String::new()));
+                let _ = done_tx.send(completion(Err(e), Vec::new(), "", &norm_cmd));
                 return;
             }
         };
@@ -387,19 +411,25 @@ pub(crate) fn schedule_create_and_send(
 
         if create_outcome.is_err() {
             let markdown = rt.tui_markdown_sink.lock().unwrap().clone();
-            let _ = done_tx.send((create_outcome.map(|_| ()), events, markdown));
+            let _ = done_tx.send(completion(
+                create_outcome.map(|_| ()),
+                events,
+                &markdown,
+                &norm_cmd,
+            ));
             return;
         }
 
         let tx_paths = create_tx_paths_from_events_or_disk(&events, &before).await;
         if tx_paths.is_empty() {
             let markdown = rt.tui_markdown_sink.lock().unwrap().clone();
-            let _ = done_tx.send((
+            let _ = done_tx.send(completion(
                 Err(NockAppError::OtherError(
                     "create-tx finished but no transaction file was written under ./txs/".into(),
                 )),
                 events,
-                markdown,
+                &markdown,
+                &norm_cmd,
             ));
             return;
         }
@@ -426,7 +456,7 @@ pub(crate) fn schedule_create_and_send(
 
         let markdown = rt.tui_markdown_sink.lock().unwrap().clone();
         refresh_create_tx_summary(&mut events, &markdown);
-        let _ = done_tx.send((combined, events, markdown));
+        let _ = done_tx.send(completion(combined, events, &markdown, &norm_cmd));
     });
 }
 

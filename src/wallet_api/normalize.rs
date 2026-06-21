@@ -36,6 +36,7 @@ pub(crate) fn command_name(cmd: &Commands) -> &'static str {
     match cmd {
         Commands::Keygen => "keygen",
         Commands::DeriveChild { .. } => "derive-child",
+        Commands::DeriveChildBatch { .. } => "derive-child-batch",
         Commands::ImportKeys { .. } => "import-keys",
         Commands::Watch { .. } => "watch",
         Commands::ExportKeys => "export-keys",
@@ -57,12 +58,12 @@ pub(crate) fn command_name(cmd: &Commands) -> &'static str {
         Commands::ShowSeedphrase => "show-seedphrase",
         Commands::ShowMasterZPub => "show-master-zpub",
         Commands::ShowMasterZPrv => "show-master-zprv",
+        Commands::ShowMasterPrv => "show-master-prv",
         Commands::ShowKeyTree { .. } => "show-key-tree",
         Commands::SignMessage { .. } => "sign-message",
         Commands::SignHash { .. } => "sign-hash",
         Commands::VerifyMessage { .. } => "verify-message",
         Commands::VerifyHash { .. } => "verify-hash",
-        _ => "command",
     }
 }
 

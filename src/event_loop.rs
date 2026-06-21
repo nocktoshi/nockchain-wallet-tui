@@ -90,12 +90,12 @@ async fn run_inner(
         tokio::select! {
             biased;
             maybe_job = job_done_rx.recv() => {
-                if let Some((res, captured, markdown)) = maybe_job {
+                if let Some((res, captured, output)) = maybe_job {
                     command_runner::apply_job_result(
                         &mut store,
                         res,
                         captured,
-                        markdown,
+                        output,
                         &identity_done_tx,
                     );
                 }

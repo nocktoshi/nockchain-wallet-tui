@@ -8,7 +8,7 @@ use super::super::app_state::UiState;
 use super::super::components::menus::{CT_ERR_ACTIONS, GENERIC_ERR};
 use super::super::prompt_overlay::running_restore_screen;
 use super::super::screens::{ErrorCtx, Screen};
-use super::super::view::{self, NO_STRUCTURED_OUTPUT};
+use super::super::view;
 use super::action::UiAction;
 use nockchain_wallet::command::Commands;
 
@@ -55,7 +55,7 @@ pub(crate) fn apply_ui_action(state: &mut UiState, action: UiAction) {
                 restore: resume,
                 cmd: cmd_clone,
             };
-            state.sync_progress = Some(progress_rx);
+            state.sync_progress = progress_rx;
         }
         UiAction::BeginBalanceSidebarFetch { progress_rx } => {
             if !matches!(state.screen, Screen::Home) {
@@ -72,9 +72,9 @@ pub(crate) fn apply_ui_action(state: &mut UiState, action: UiAction) {
         UiAction::JobCompleted {
             result,
             events,
-            markdown,
+            output,
         } => {
-            apply_job_completed(state, result, events, markdown);
+            apply_job_completed(state, result, events, output);
         }
         UiAction::BalanceSidebarCompleted {
             nonce,
@@ -196,13 +196,13 @@ fn apply_balance_sidebar_completed(
 
 fn apply_job_completed(
     state: &mut UiState,
-    result: Result<(), NockAppError>,
+    result: Result<(), String>,
     events: Vec<nockchain_wallet::wallet_outcome::WalletEvent>,
-    markdown: String,
+    output: String,
 ) {
     state.sync_progress = None;
     state.last_command_events = events.clone();
-    let display = view::render_command_output(&events, &markdown);
+    let display = output;
     let placeholder = Screen::Home;
     let taken = std::mem::replace(&mut state.screen, placeholder);
     match taken {
@@ -211,13 +211,11 @@ fn apply_job_completed(
                 && matches!(*restore, Screen::Receive { .. });
             match result {
                 Ok(()) => {
-                    if receive_fetch {
+                    if receive_fetch || display.is_empty() {
                         state.last_command_output.clear();
-                    } else if display != NO_STRUCTURED_OUTPUT {
+                    } else {
                         state.last_command_output = display.clone();
                         state.output_scroll = 0;
-                    } else {
-                        state.last_command_output.clear();
                     }
                     state.screen = match *restore {
                         Screen::SendSimple { .. } if matches!(&cmd, Commands::CreateTx { .. }) => {
@@ -234,7 +232,7 @@ fn apply_job_completed(
                         other => other,
                     };
                     if receive_fetch {
-                        apply_receive_address_if_needed(state, &cmd, &events, &markdown);
+                        apply_receive_address_if_needed(state, &cmd, &events);
                     }
                     if matches!(&cmd, Commands::ShowBalance) {
                         state.balance_panel.text = view::render_balance_sidebar(&events);
@@ -252,13 +250,11 @@ fn apply_job_completed(
                     } else {
                         e.to_string()
                     };
-                    if receive_fetch {
+                    if receive_fetch || out.is_empty() {
                         state.last_command_output.clear();
-                    } else if out != NO_STRUCTURED_OUTPUT {
+                    } else {
                         state.last_command_output = out;
                         state.output_scroll = 0;
-                    } else {
-                        state.last_command_output.clear();
                     }
                     if matches!(&cmd, Commands::ShowBalance) {
                         state.balance_panel.error = Some(e.to_string());
@@ -292,7 +288,6 @@ fn apply_receive_address_if_needed(
     state: &mut UiState,
     cmd: &Commands,
     events: &[nockchain_wallet::wallet_outcome::WalletEvent],
-    markdown: &str,
 ) {
     if !matches!(cmd, Commands::ListActiveAddresses) {
         return;
@@ -306,7 +301,7 @@ fn apply_receive_address_if_needed(
     {
         *loading = false;
         *error = None;
-        let resolved = view::first_active_address_from_output(events, markdown);
+        let resolved = view::first_active_address(events);
         *address = resolved.clone();
         state.balance_panel.address = resolved;
         state.balance_panel.identity_loading = false;

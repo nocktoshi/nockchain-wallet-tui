@@ -70,19 +70,6 @@ pub(crate) fn render_events_for_output(events: &[WalletEvent]) -> String {
     parts.join("\n\n")
 }
 
-/// Prefer structured [`WalletEvent`] output; fall back to kernel `%markdown` (seed phrase, keys, …).
-pub(crate) fn render_command_output(events: &[WalletEvent], markdown: &str) -> String {
-    let structured = render_events_for_output(events);
-    if structured != NO_STRUCTURED_OUTPUT {
-        return structured;
-    }
-    let md = markdown.trim();
-    if md.is_empty() {
-        return NO_STRUCTURED_OUTPUT.to_string();
-    }
-    markdown.to_string()
-}
-
 /// Total assets in nicks from the latest balance snapshot event.
 pub(crate) fn total_assets_nicks(events: &[WalletEvent]) -> Option<u64> {
     for event in events {
@@ -98,30 +85,6 @@ pub(crate) fn first_active_address(events: &[WalletEvent]) -> Option<String> {
     for event in events {
         if let WalletEvent::AddressListV1 { rows, .. } = event {
             return rows.first().map(|r| r.address_b58.clone());
-        }
-    }
-    None
-}
-
-/// Best-effort active address from structured events or kernel `%markdown`.
-pub(crate) fn first_active_address_from_output(
-    events: &[WalletEvent],
-    markdown: &str,
-) -> Option<String> {
-    first_active_address(events).or_else(|| first_active_address_from_markdown(markdown))
-}
-
-/// Parse a base58 P2PKH-style address from command markdown output.
-pub(crate) fn first_active_address_from_markdown(markdown: &str) -> Option<String> {
-    for line in markdown.lines() {
-        for token in line.split_whitespace() {
-            let word: String = token
-                .chars()
-                .filter(|c| matches!(c, '1'..='9' | 'A'..='H' | 'J'..='N' | 'P'..='Z' | 'a'..='k' | 'm'..='z'))
-                .collect();
-            if (40..=60).contains(&word.len()) && bs58::decode(&word).into_vec().is_ok() {
-                return Some(word);
-            }
         }
     }
     None

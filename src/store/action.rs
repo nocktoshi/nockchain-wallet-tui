@@ -1,6 +1,5 @@
 //! Redux-style actions for the wallet TUI UI.
 
-use nockapp::NockAppError;
 use tokio::sync::watch;
 
 use crate::screens::Screen;
@@ -19,24 +18,26 @@ pub(crate) enum UiAction {
     ReplaceScreen(Screen),
     /// Leave splash for home + activity focus (balance refresh scheduled by caller).
     EnterMainFromSplash,
-    /// Swap to [`Screen::Running`] and attach sync progress receiver.
+    /// Swap to [`Screen::Running`]. `progress_rx` is `None` for HTTP-routed commands (no granular
+    /// sync progress over the API boundary; spinner only) and `Some` for in-process flows.
     EnterRunningWalletJob {
         cmd: Commands,
         label: String,
-        progress_rx: watch::Receiver<(usize, usize)>,
+        progress_rx: Option<watch::Receiver<(usize, usize)>>,
     },
     /// Home balance refresh (receiver only; sender held by spawned task).
     BeginBalanceSidebarFetch {
         progress_rx: watch::Receiver<(usize, usize)>,
     },
     JobCompleted {
-        result: Result<(), NockAppError>,
+        result: Result<(), String>,
         events: Vec<nockchain_wallet::wallet_outcome::WalletEvent>,
-        markdown: String,
+        /// Rendered report text for the output panel (normalized; never raw kernel markdown).
+        output: String,
     },
     BalanceSidebarCompleted {
         nonce: u64,
-        result: Result<(), NockAppError>,
+        result: Result<(), nockapp::NockAppError>,
         events: Vec<nockchain_wallet::wallet_outcome::WalletEvent>,
     },
     BeginHomeIdentityFetch,

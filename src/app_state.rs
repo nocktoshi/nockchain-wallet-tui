@@ -8,7 +8,6 @@ use ratatui::widgets::ListState;
 use tokio::sync::watch;
 
 use super::screens::Screen;
-use super::view;
 use nockchain_wallet::command::Commands;
 
 /// Bottom status/output panel: visible while a command runs or meaningful output exists.
@@ -24,7 +23,7 @@ pub(crate) fn status_modal_visible(state: &UiState) -> bool {
         }
         return true;
     }
-    !state.last_command_output.is_empty() && state.last_command_output != view::NO_STRUCTURED_OUTPUT
+    !state.last_command_output.is_empty()
 }
 
 /// CoinGecko USD price for the home hero.
