@@ -36,7 +36,7 @@ impl Default for WalletSessionState {
     fn default() -> Self {
         Self {
             schema_version: WALLET_SESSION_SCHEMA.to_string(),
-            public_grpc_server_addr: "https://nockchain-api.zorp.io".to_string(),
+            public_grpc_server_addr: "https://rpc.nockchain.net".to_string(),
             api_listen: DEFAULT_API_LISTEN.to_string(),
         }
     }

@@ -9,7 +9,6 @@ use crate::components::price::format_usd_total;
 use crate::format::format_nock_from_nicks;
 use nockchain_wallet::recipient::RecipientSpecToken;
 
-/// NNS registry payee from [nockchain#116](https://github.com/nockchain/nockchain/pull/116).
 pub(crate) const REGISTRY_P2PKH: &str = "8s29XUK8Do7QWt2MHfPdd1gDSta6db4c3bQrxP1YdJNfXpL3WPzTT5";
 
 const NOCKNAMES_SEARCH_URL: &str = "https://api.nocknames.com/search";
