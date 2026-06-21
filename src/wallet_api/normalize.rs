@@ -40,14 +40,13 @@ pub(crate) fn augment_events_from_markdown(
     cmd: &Commands,
 ) {
     match cmd {
-        Commands::ListActiveAddresses | Commands::ListMasterAddresses => {
+        Commands::ListActiveAddresses | Commands::ListMasterAddresses
             if !events
                 .iter()
-                .any(|e| matches!(e, WalletEvent::AddressListV1 { .. }))
-            {
-                if let Some(ev) = synthesize_address_list(markdown, command_name(cmd)) {
-                    events.push(ev);
-                }
+                .any(|e| matches!(e, WalletEvent::AddressListV1 { .. })) =>
+        {
+            if let Some(ev) = synthesize_address_list(markdown, command_name(cmd)) {
+                events.push(ev);
             }
         }
         _ => {}
@@ -119,7 +118,11 @@ pub(crate) fn parse_master_addresses(markdown: &str) -> Vec<MasterAddressRow> {
         let active = value.contains("(active)");
         // The address is the first whitespace-delimited token; the `**(active)**` marker (if any)
         // follows after a space, so this drops it cleanly.
-        let address_b58 = value.split_whitespace().next().unwrap_or_default().to_string();
+        let address_b58 = value
+            .split_whitespace()
+            .next()
+            .unwrap_or_default()
+            .to_string();
         if address_b58.is_empty() {
             continue;
         }

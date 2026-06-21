@@ -132,7 +132,10 @@ fn draw_master_picker_popup(f: &mut Frame<'_>, app: &AppState, area: Rect) {
         .map(|row| {
             let dot = if row.active { "● " } else { "  " };
             let suffix = if row.active { "  (active)" } else { "" };
-            let addr = truncate_display(&row.address_b58, inner_w.saturating_sub(dot.len() + suffix.len()));
+            let addr = truncate_display(
+                &row.address_b58,
+                inner_w.saturating_sub(dot.len() + suffix.len()),
+            );
             ListItem::new(Line::from(Span::styled(
                 format!("{dot}{addr}{suffix}"),
                 Style::default().fg(Color::Rgb(220, 235, 220)),
@@ -141,7 +144,9 @@ fn draw_master_picker_popup(f: &mut Frame<'_>, app: &AppState, area: Rect) {
         .collect();
 
     let mut state = ListState::default();
-    state.select(Some(app.master_picker.sel.min(addresses.len().saturating_sub(1))));
+    state.select(Some(
+        app.master_picker.sel.min(addresses.len().saturating_sub(1)),
+    ));
     let list = List::new(items)
         .block(
             Block::default()
@@ -385,7 +390,7 @@ fn draw_cta_row(f: &mut Frame<'_>, area: Rect) {
                     .add_modifier(Modifier::BOLD),
             )]),
             Line::from(vec![Span::styled(
-                format!("───"),
+                "───".to_string(),
                 Style::default().fg(fg).bg(THEME_BG_DEEP),
             )]),
             Line::from(vec![Span::styled(

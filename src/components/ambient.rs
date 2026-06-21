@@ -73,7 +73,7 @@ fn scanline_row_string(w: usize, fc: usize, global_y: usize, start_x: u16) -> St
                 '─'
             } else if glow < 38 {
                 '·'
-            } else if (gx.wrapping_add(global_y).wrapping_add(fc)) % 9 == 0 {
+            } else if (gx.wrapping_add(global_y).wrapping_add(fc)).is_multiple_of(9) {
                 '˙'
             } else {
                 ' '
@@ -123,7 +123,7 @@ fn scanline_row_string_subtle(
             let d0 = gx.abs_diff(b0);
             if d0 < 4 {
                 '·'
-            } else if (gx.wrapping_add(global_y).wrapping_add(fc)) % 23 == 0 {
+            } else if (gx.wrapping_add(global_y).wrapping_add(fc)).is_multiple_of(23) {
                 '˙'
             } else {
                 ' '

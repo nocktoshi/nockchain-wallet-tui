@@ -6,7 +6,7 @@ pub(crate) fn estimate_wrapped_source_lines(text: &str, inner_w: u16) -> usize {
     text.split('\n')
         .map(|line| {
             let n = line.chars().count().max(1);
-            (n + w - 1) / w
+            n.div_ceil(w)
         })
         .sum::<usize>()
         .max(1)

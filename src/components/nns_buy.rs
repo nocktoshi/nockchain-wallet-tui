@@ -216,7 +216,7 @@ fn draw_status(
                 hint.push_str(&format!("  ·  @ ${usd:.4} / NOCK"));
             }
             if let Some(est) = nns::estimated_fee_hint(name_input, usd) {
-                hint.push_str("\n");
+                hint.push('\n');
                 hint.push_str(&est);
             }
             (hint, THEME_MUTED)

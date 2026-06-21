@@ -51,9 +51,10 @@ fn handle_msg(store: &mut UIStore, rt: &TuiRuntime, msg: Msg, msg_tx: &mpsc::Unb
             let ok = res.is_ok();
             command_runner::apply_job_result(store, res, events, output, msg_tx);
             if was_set_active && ok {
-                // Re-derive balance → identity → master list for the new active wallet.
+                // Re-derive the home view for the new active wallet. Only kick the balance refresh;
+                // identity + master-address fetches cascade from its completion (Msg::Balance), so
+                // the API-routed master fetch never overlaps this direct balance refresh.
                 command_runner::schedule_balance_sidebar_refresh(store, rt, msg_tx);
-                command_runner::schedule_master_addresses_fetch(store, rt, msg_tx);
             }
         }
         Msg::Balance((nonce, res, events)) => {

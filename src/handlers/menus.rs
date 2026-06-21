@@ -178,7 +178,7 @@ curl -sS '{base}/health' \
 
                             store.state.last_command_output = API_CURL_TEMPLATE
                                 .replace("{listen}", &current_api_listen(rt))
-                                .replace("{token}", &rt.api_auth_token.as_ref())
+                                .replace("{token}", rt.api_auth_token.as_ref())
                                 .replace("{base}", &base)
                                 .replace("{auth}", &auth);
                             store.state.last_command_status = None;

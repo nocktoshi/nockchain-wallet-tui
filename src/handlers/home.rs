@@ -23,8 +23,12 @@ pub(super) async fn handle_home(
     // The wallet dropdown, while open, captures navigation keys before anything else.
     if store.state.master_picker.open {
         match key.code {
-            KeyCode::Up | KeyCode::Char('k') => store.dispatch(UiAction::MoveMasterPickerSel { delta: -1 }),
-            KeyCode::Down | KeyCode::Char('j') => store.dispatch(UiAction::MoveMasterPickerSel { delta: 1 }),
+            KeyCode::Up | KeyCode::Char('k') => {
+                store.dispatch(UiAction::MoveMasterPickerSel { delta: -1 })
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                store.dispatch(UiAction::MoveMasterPickerSel { delta: 1 })
+            }
             KeyCode::Esc => store.dispatch(UiAction::CloseMasterPicker),
             KeyCode::Enter => select_active_master(store, rt, msg_tx),
             _ => {}
@@ -134,11 +138,7 @@ pub(super) async fn handle_home(
 
 /// Confirm the highlighted wallet in the dropdown: if it isn't already active, switch to it via
 /// `set-active-master-address`. The completion refreshes the home view (see the `Msg::Job` handler).
-fn select_active_master(
-    store: &mut UIStore,
-    rt: &TuiRuntime,
-    msg_tx: &mpsc::UnboundedSender<Msg>,
-) {
+fn select_active_master(store: &mut UIStore, rt: &TuiRuntime, msg_tx: &mpsc::UnboundedSender<Msg>) {
     let chosen = store
         .state
         .master_picker

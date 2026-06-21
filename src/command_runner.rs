@@ -71,9 +71,12 @@ pub(crate) struct TuiRuntime {
     pub snapshot: Arc<Mutex<Option<NormalizedSnapshot>>>,
     /// Session connection config.
     pub connection: Arc<std::sync::Mutex<ConnectionCli>>,
-    /// Structured kernel/API events from `[%raw …]` effects.
+    /// Structured kernel/API events from `[%raw …]` effects. Shared across calls on purpose: the
+    /// upstream IO drivers accumulate on the long-lived wallet app, so a per-call sink would let an
+    /// old command's driver write to a dropped sink. Concurrency is handled by routing data fetches
+    /// through the serialized HTTP API rather than by isolating sinks.
     pub wallet_event_sink: Arc<std::sync::Mutex<Vec<WalletEvent>>>,
-    /// Captured kernel `%markdown` (create-tx, send-tx, …) for TUI formatters.
+    /// Captured kernel `%markdown` (create-tx, send-tx, …) for server-side normalization.
     pub tui_markdown_sink: Arc<std::sync::Mutex<String>>,
     /// Session settings persisted in `session.json` and exposed via GET/POST `/v1/wallet/state`.
     pub session_config: Arc<RwLock<WalletSessionState>>,
@@ -107,9 +110,9 @@ pub(crate) async fn run_command_on_runtime(
         let mut s = rt.snapshot.lock().await;
         execute_wallet_command(
             &rt.connection.lock().unwrap(),
-            &mut *w,
+            &mut w,
             &command,
-            &mut *s,
+            &mut s,
             false,
             hooks,
         )
@@ -301,9 +304,11 @@ pub(crate) fn apply_home_identity_result(
     store.dispatch(UiAction::HomeIdentityCompleted { address, nockname });
 }
 
-/// Fetch `list-master-addresses` for the home wallet dropdown. Uses the direct runtime path (not
-/// the loopback HTTP API) because the active-wallet marker (`**(active)**`) lives only in the kernel
-/// markdown, which the typed `events`/`reports` contract doesn't carry.
+/// Fetch `list-master-addresses` for the home wallet dropdown through the loopback HTTP API — the
+/// same client path a web UI would use. Going through the API means the `api_job_loop` serializes
+/// this with the identity fetch (no shared-sink contention), and the active-wallet flag rides the
+/// normalized report (`**(active)**` preserved server-side). Triggered only after balance completes,
+/// so it never overlaps the direct balance refresh.
 pub(crate) fn schedule_master_addresses_fetch(
     store: &mut UIStore,
     rt: &TuiRuntime,
@@ -320,12 +325,15 @@ pub(crate) fn schedule_master_addresses_fetch(
     let rt = rt.clone();
     let tx = done_tx.clone();
     tokio::task::spawn_local(async move {
-        let outcome =
-            run_command_on_runtime(&rt, Commands::ListMasterAddresses, None, None).await;
-        let rows = match outcome {
-            // Read the captured markdown immediately (no intervening await that could clobber the
-            // shared sink) and parse the active-flagged rows.
-            Ok(_) => crate::wallet_api::parse_master_addresses(&rt.tui_markdown_sink.lock().unwrap()),
+        let listen = crate::session::current_api_listen(&rt);
+        let resp = run_command_http(
+            &listen,
+            rt.api_auth_token.as_ref(),
+            vec!["list-master-addresses".to_string()],
+        )
+        .await;
+        let rows = match resp {
+            Ok(r) => crate::wallet_api::parse_master_addresses(&reports_to_text(&r.reports)),
             Err(_) => Vec::new(),
         };
         let _ = tx.send(Msg::MasterAddresses(rows));

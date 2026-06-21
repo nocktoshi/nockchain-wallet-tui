@@ -46,7 +46,7 @@ pub(crate) struct UiFx {
 }
 
 /// Cached balance markdown for the home wallet tab (from `ShowBalance` / sidebar refresh).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct BalancePanelState {
     pub text: String,
     pub scroll: u16,
@@ -91,21 +91,6 @@ impl MasterPickerState {
     /// Show the dropdown affordance only when there is a real choice to make.
     pub fn has_choice(&self) -> bool {
         self.addresses.len() > 1
-    }
-}
-
-impl Default for BalancePanelState {
-    fn default() -> Self {
-        Self {
-            text: String::new(),
-            scroll: 0,
-            loading: false,
-            error: None,
-            events: Vec::new(),
-            identity_loading: false,
-            address: None,
-            nockname: None,
-        }
     }
 }
 

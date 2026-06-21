@@ -65,7 +65,7 @@ fn format_integer_with_commas(n: u128) -> String {
     let bytes = s.as_bytes();
     let mut out = String::new();
     for (i, ch) in bytes.iter().enumerate() {
-        if i > 0 && (bytes.len() - i) % 3 == 0 {
+        if i > 0 && (bytes.len() - i).is_multiple_of(3) {
             out.push(',');
         }
         out.push(*ch as char);

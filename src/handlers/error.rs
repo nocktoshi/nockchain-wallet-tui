@@ -97,7 +97,7 @@ pub(super) async fn error_screen(
                                 super::schedule_cmd(store, rt, done_tx, cmd.clone(), "Retry");
                             }
                             1 => {
-                                if let Some(w) = CreateTxWizard::from_command(&cmd) {
+                                if let Some(w) = CreateTxWizard::from_command(cmd) {
                                     super::replace_screen(store, Screen::CreateTx { w });
                                 } else {
                                     super::replace_screen(store, Screen::Transactions { sel: 0 });
