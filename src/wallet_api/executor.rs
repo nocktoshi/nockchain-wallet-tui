@@ -5,9 +5,13 @@ use std::sync::Arc;
 use clap::Parser;
 use tokio::sync::mpsc;
 
-use super::{normalize, spawn_http_server, ApiServerHandle, TuiApiJob, TuiCommandResponse};
+use super::{
+    normalize, parse_markdown_to_sections, spawn_http_server, ApiServerHandle, Report, TuiApiJob,
+    TuiApiRequest, TuiCommandResponse,
+};
 use crate::command_runner::{self, TuiRuntime};
 use crate::session::current_api_listen;
+use nockchain_wallet::command::Commands;
 
 /// Run a wallet command from the TUI JSON API (`argv` tokens, no binary name).
 async fn execute_tui_api_command(rt: &TuiRuntime, argv: Vec<String>) -> TuiCommandResponse {
@@ -33,13 +37,77 @@ async fn execute_tui_api_command(rt: &TuiRuntime, argv: Vec<String>) -> TuiComma
     let resp = match outcome {
         Ok(data) => {
             let markdown = rt.tui_markdown_sink.lock().unwrap().clone();
-            let reports = normalize(&data.events, &markdown, &command);
-            TuiCommandResponse::ok(data.events, reports)
+            let mut events = data.events;
+            super::augment_events_from_markdown(&mut events, &markdown, &command);
+            let reports = normalize(&events, &markdown, &command);
+            TuiCommandResponse::ok(events, reports)
         }
         Err(e) => TuiCommandResponse::failure(e.to_string()),
     };
     tracing::debug!(success = resp.is_success(), error = ?resp.error, "api: command result");
     resp
+}
+
+/// Route a typed API request to the right wallet operation (all on the TUI `LocalSet`).
+async fn execute_request(rt: &TuiRuntime, request: TuiApiRequest) -> TuiCommandResponse {
+    match request {
+        TuiApiRequest::Command(argv) => execute_tui_api_command(rt, argv).await,
+        TuiApiRequest::PlanSimpleSend {
+            recipient,
+            amount_nicks,
+        } => execute_plan(rt, &recipient, amount_nicks).await,
+        TuiApiRequest::CreateAndSendSimple {
+            recipient,
+            amount_nicks,
+        } => match crate::send_simple::build_simple_send_tx(&recipient, amount_nicks) {
+            Ok(cmd) => execute_create_and_send_request(rt, cmd).await,
+            Err(e) => TuiCommandResponse::failure(e),
+        },
+        TuiApiRequest::NnsRegister { name } => execute_nns_register(rt, &name).await,
+    }
+}
+
+/// Planner preview for a simple send: build the create-tx, run the planner (no kernel poke), and
+/// return the preview as a structured report.
+async fn execute_plan(rt: &TuiRuntime, recipient: &str, amount_nicks: u64) -> TuiCommandResponse {
+    let cmd = match crate::send_simple::build_simple_send_tx(recipient, amount_nicks) {
+        Ok(c) => c,
+        Err(e) => return TuiCommandResponse::failure(e),
+    };
+    let preview = {
+        let snap = rt.snapshot.lock().await.clone();
+        let mut wallet = rt.wallet.lock().await;
+        crate::send_simple::plan_send_preview(&mut wallet, snap, &cmd).await
+    };
+    match preview {
+        Ok(text) => TuiCommandResponse::ok(
+            Vec::new(),
+            vec![Report::new(
+                "create-tx-plan",
+                "Review transaction",
+                parse_markdown_to_sections(&text),
+            )],
+        ),
+        Err(e) => TuiCommandResponse::failure(e.to_string()),
+    }
+}
+
+async fn execute_create_and_send_request(rt: &TuiRuntime, cmd: Commands) -> TuiCommandResponse {
+    let (res, events, markdown) = command_runner::execute_create_and_send(rt, cmd.clone()).await;
+    let reports = normalize(&events, &markdown, &cmd);
+    match res {
+        Ok(()) => TuiCommandResponse::ok(events, reports),
+        Err(e) => TuiCommandResponse::from_parts(events, reports, Some(e.to_string())),
+    }
+}
+
+async fn execute_nns_register(rt: &TuiRuntime, name: &str) -> TuiCommandResponse {
+    let recipient = match crate::nns::build_registry_recipient(name) {
+        Ok(r) => r,
+        Err(e) => return TuiCommandResponse::failure(e),
+    };
+    let cmd = crate::nns::schedule_create_tx_command(recipient);
+    execute_create_and_send_request(rt, cmd).await
 }
 
 /// Start (or restart) the JSON API listener using session `api_listen`.
@@ -71,8 +139,8 @@ pub(crate) async fn run_api_job_loop(rt: TuiRuntime, mut job_rx: mpsc::Receiver<
     *rt.api_server.lock().unwrap() = server;
 
     while let Some(job) = job_rx.recv().await {
-        tracing::debug!(argv = ?job.argv, "api: job received");
-        let resp = execute_tui_api_command(&rt, job.argv).await;
+        tracing::debug!(request = ?job.request, "api: job received");
+        let resp = execute_request(&rt, job.request).await;
         let _ = job.resp.send(resp);
     }
 

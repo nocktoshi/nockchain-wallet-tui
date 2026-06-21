@@ -22,7 +22,8 @@ pub(crate) enum SendSimpleFocus {
 pub(crate) enum SendSimplePhase {
     Form,
     Planning,
-    Review { cmd: Commands, preview: String },
+    /// Planner preview returned by `/tx/plan`; the screen's amount+recipient drive the send.
+    Review { preview: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

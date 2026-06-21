@@ -89,8 +89,23 @@ pub(crate) async fn plan_send_preview(
     ))
 }
 
-pub(crate) fn build_create_tx_command(amount: &str, recipient: &str) -> Result<Commands, String> {
+/// Client-side validation for the send form: parse the amount and check the address. Returns the
+/// `(recipient, amount_nicks)` to send to the `/tx/plan` and `/tx/create-and-send` endpoints.
+pub(crate) fn validate_send(amount: &str, recipient: &str) -> Result<(String, u64), String> {
     let nicks = parse_nock_amount_to_nicks(amount)?;
+    let addr = recipient.trim().to_string();
+    if addr.is_empty() {
+        return Err("Receiver address is required".into());
+    }
+    if Hash::from_base58(&addr).is_err() {
+        return Err("Invalid Nockchain address (base58)".into());
+    }
+    Ok((addr, nicks))
+}
+
+/// Build the simple-send `create-tx` command from validated inputs. Pure (no wallet), so the API
+/// executor builds the same command a web client would trigger.
+pub(crate) fn build_simple_send_tx(recipient: &str, amount_nicks: u64) -> Result<Commands, String> {
     let addr = recipient.trim().to_string();
     if addr.is_empty() {
         return Err("Receiver address is required".into());
@@ -102,7 +117,7 @@ pub(crate) fn build_create_tx_command(amount: &str, recipient: &str) -> Result<C
         names: None,
         recipients: vec![RecipientSpecToken::P2pkh {
             address: addr,
-            amount: nicks,
+            amount: amount_nicks,
             memo: None,
             blob: None,
         }],

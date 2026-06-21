@@ -11,7 +11,7 @@ use crate::command_runner::{
     SendSimplePlanCompletion, TuiRuntime,
 };
 use crate::screens::{Screen, SendSimpleFocus, SendSimplePhase, TuiControl};
-use crate::send_simple::{build_create_tx_command, max_amount_string};
+use crate::send_simple::{max_amount_string, validate_send};
 use crate::store::{UIStore, UiAction};
 
 pub(super) async fn handle_send_simple(
@@ -38,7 +38,7 @@ pub(super) async fn handle_send_simple(
 
     match phase {
         SendSimplePhase::Planning => return Ok(TuiControl::Continue),
-        SendSimplePhase::Review { cmd, preview } => {
+        SendSimplePhase::Review { preview } => {
             return handle_send_simple_review(
                 store,
                 key,
@@ -49,7 +49,6 @@ pub(super) async fn handle_send_simple(
                 amount_cursor,
                 recipient_cursor,
                 focus,
-                cmd,
                 preview,
                 status,
                 review_scroll,
@@ -93,8 +92,8 @@ pub(super) async fn handle_send_simple(
                 replace_screen(store, Screen::Home);
                 return Ok(TuiControl::Continue);
             }
-            SendSimpleFocus::Continue => match build_create_tx_command(&amount, &recipient) {
-                Ok(cmd) => {
+            SendSimpleFocus::Continue => match validate_send(&amount, &recipient) {
+                Ok((to, amount_nicks)) => {
                     replace_screen(
                         store,
                         Screen::SendSimple {
@@ -108,7 +107,7 @@ pub(super) async fn handle_send_simple(
                             review_scroll: 0,
                         },
                     );
-                    schedule_send_simple_plan(rt.clone(), cmd, plan_done_tx.clone());
+                    schedule_send_simple_plan(rt.clone(), to, amount_nicks, plan_done_tx.clone());
                     return Ok(TuiControl::Continue);
                 }
                 Err(e) => status = Some(e),
@@ -191,7 +190,6 @@ async fn handle_send_simple_review(
     amount_cursor: usize,
     recipient_cursor: usize,
     mut focus: SendSimpleFocus,
-    cmd: nockchain_wallet::command::Commands,
     preview: String,
     status: Option<String>,
     mut review_scroll: u16,
@@ -232,7 +230,7 @@ async fn handle_send_simple_review(
                 amount_cursor,
                 recipient_cursor,
                 focus,
-                phase: SendSimplePhase::Review { cmd, preview },
+                phase: SendSimplePhase::Review { preview },
                 status,
                 review_scroll,
             },
@@ -241,7 +239,6 @@ async fn handle_send_simple_review(
     }
 
     let mut next_phase = SendSimplePhase::Review {
-        cmd: cmd.clone(),
         preview: preview.clone(),
     };
     match key.code {
@@ -260,7 +257,9 @@ async fn handle_send_simple_review(
                 review_scroll = 0;
             }
             SendSimpleFocus::Continue => {
-                schedule_send_simple_create_and_send(store, rt, done_tx.clone(), cmd);
+                if let Ok((to, amount_nicks)) = validate_send(&amount, &recipient) {
+                    schedule_send_simple_create_and_send(store, rt, done_tx.clone(), to, amount_nicks);
+                }
                 return Ok(TuiControl::Continue);
             }
             _ => {}
@@ -303,14 +302,14 @@ pub(crate) fn apply_send_simple_plan_result(store: &mut UIStore, result: SendSim
         return;
     };
     match result {
-        Ok((preview, cmd)) => {
+        Ok(preview) => {
             store.dispatch(UiAction::ReplaceScreen(Screen::SendSimple {
                 amount,
                 recipient,
                 amount_cursor,
                 recipient_cursor,
                 focus: SendSimpleFocus::Continue,
-                phase: SendSimplePhase::Review { cmd, preview },
+                phase: SendSimplePhase::Review { preview },
                 status: None,
                 review_scroll: 0,
             }));

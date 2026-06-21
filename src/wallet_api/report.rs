@@ -138,6 +138,17 @@ impl TuiCommandResponse {
         }
     }
 
+    /// Build a response with partial data on error (e.g. create-and-send that failed mid-flight but
+    /// still produced events/reports worth showing).
+    pub fn from_parts(events: Vec<WalletEvent>, reports: Vec<Report>, error: Option<String>) -> Self {
+        Self {
+            schema_version: TUI_OUTCOME_SCHEMA.to_string(),
+            events,
+            reports,
+            error,
+        }
+    }
+
     pub fn is_success(&self) -> bool {
         self.error.is_none()
     }

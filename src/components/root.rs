@@ -13,9 +13,8 @@ use super::create_tx_panel::draw_create_tx;
 use super::home::{balance_button_abs_rect, draw_wallet_tab};
 use super::home_tabs::draw_home_tabs;
 use super::loading::loading_indicator_paragraph;
-use super::menus::{
-    IMPORT_SRC, KEYS_MENU, MAIN_MENU, NOTES_MENU, SETTINGS_MENU, SIGN_MENU, TX_MENU, WATCH_MENU,
-};
+use super::menus::{MAIN_MENU, SETTINGS_MENU};
+use crate::actions;
 use super::nns_buy::draw_nns_buy;
 use super::prompt_bar::{draw_prompt_bar, prompt_bar_height};
 use super::receive::draw_receive;
@@ -159,12 +158,29 @@ fn draw_activity_panel(
         Screen::Receive { .. } => draw_receive(f, app, panel, area, tick),
         Screen::NnsBuy { .. } => draw_nns_buy(f, app, panel, area, tick),
         Screen::SendSimple { .. } if !is_running => draw_send_simple(f, app, area),
-        Screen::Notes { sel } => list_draw(f, app, area, "Balances", NOTES_MENU, *sel),
-        Screen::Keys { sel } => list_draw(f, app, area, "Keys", KEYS_MENU, *sel),
-        Screen::KeysImport { sel } => list_draw(f, app, area, "Import from", IMPORT_SRC, *sel),
-        Screen::Transactions { sel } => list_draw(f, app, area, "Transactions", TX_MENU, *sel),
-        Screen::Watch { sel } => list_draw(f, app, area, "Watch-only", WATCH_MENU, *sel),
-        Screen::SignVerify { sel } => list_draw(f, app, area, "Sign / verify", SIGN_MENU, *sel),
+        Screen::Notes { sel } => {
+            list_draw(f, app, area, "Balances", &actions::labels(actions::NOTES_ITEMS), *sel)
+        }
+        Screen::Keys { sel } => {
+            list_draw(f, app, area, "Keys", &actions::labels(actions::KEYS_ITEMS), *sel)
+        }
+        Screen::KeysImport { sel } => list_draw(
+            f,
+            app,
+            area,
+            "Import from",
+            &actions::labels(actions::KEYS_IMPORT_ITEMS),
+            *sel,
+        ),
+        Screen::Transactions { sel } => {
+            list_draw(f, app, area, "Transactions", &actions::labels(actions::TX_ITEMS), *sel)
+        }
+        Screen::Watch { sel } => {
+            list_draw(f, app, area, "Watch-only", &actions::labels(actions::WATCH_ITEMS), *sel)
+        }
+        Screen::SignVerify { sel } => {
+            list_draw(f, app, area, "Sign / verify", &actions::labels(actions::SIGN_ITEMS), *sel)
+        }
         Screen::Settings { sel } => {
             let endpoint_line = format!(
                 "Public gRPC: `{}`\nJSON API: `{}`",

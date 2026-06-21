@@ -17,10 +17,23 @@ use super::auth::require_api_auth;
 use super::state::{save_session_state, validate_session_state, WalletSessionState};
 use super::TuiCommandResponse;
 
-/// Work item executed on the TUI local task set (wallet is not `Send`).
+/// A unit of wallet work executed on the TUI `LocalSet` (the wallet is `!Send`). Typed so the same
+/// endpoints a web UI calls drive the composite flows that need the wallet/snapshot.
+#[derive(Debug)]
+pub(crate) enum TuiApiRequest {
+    /// Generic command from clap `argv` tokens.
+    Command(Vec<String>),
+    /// Planner preview for a simple send (no kernel poke, no file written).
+    PlanSimpleSend { recipient: String, amount_nicks: u64 },
+    /// Build + broadcast a simple send (create-tx then send-tx).
+    CreateAndSendSimple { recipient: String, amount_nicks: u64 },
+    /// Register a `.nock` name: registry-payment create-tx then send-tx.
+    NnsRegister { name: String },
+}
+
 #[derive(Debug)]
 pub(crate) struct TuiApiJob {
-    pub argv: Vec<String>,
+    pub request: TuiApiRequest,
     pub resp: oneshot::Sender<TuiCommandResponse>,
 }
 
@@ -32,8 +45,19 @@ struct HttpState {
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct CommandRequest {
-    pub argv: Vec<String>,
+struct CommandRequest {
+    argv: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SimpleSendRequest {
+    recipient: String,
+    amount_nicks: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct NnsRequest {
+    name: String,
 }
 
 /// Handle to stop the background HTTP listener (e.g. when Settings changes the bind address).
@@ -88,6 +112,9 @@ pub(crate) fn spawn_http_server(
             let protected = Router::new()
                 .route("/v1/wallet/state", get(get_session).post(post_session))
                 .route("/v1/wallet/command", post(run_command))
+                .route("/v1/wallet/tx/plan", post(post_plan))
+                .route("/v1/wallet/tx/create-and-send", post(post_create_and_send))
+                .route("/v1/wallet/nns/register", post(post_nns_register))
                 .route_layer(middleware::from_fn_with_state(auth_token, require_api_auth))
                 .with_state(state.clone());
 
@@ -157,23 +184,19 @@ async fn post_session(
     Ok(Json(body))
 }
 
-async fn run_command(
-    State(state): State<HttpState>,
-    Json(body): Json<CommandRequest>,
+/// Hand a request to the TUI executor (on the `LocalSet`) and await its response.
+async fn dispatch_job(
+    state: &HttpState,
+    request: TuiApiRequest,
 ) -> (StatusCode, Json<TuiCommandResponse>) {
-    if body.argv.is_empty() {
-        return bad_request("argv must contain at least one command token".into());
-    }
-
     let (resp_tx, resp_rx) = oneshot::channel();
     let job = TuiApiJob {
-        argv: body.argv,
+        request,
         resp: resp_tx,
     };
     if state.jobs.send(job).await.is_err() {
         return server_error("TUI wallet executor unavailable (is the TUI running?)");
     }
-
     match resp_rx.await {
         Ok(json) => {
             let status = if json.is_success() {
@@ -185,6 +208,51 @@ async fn run_command(
         }
         Err(_) => server_error("TUI wallet executor dropped response"),
     }
+}
+
+async fn run_command(
+    State(state): State<HttpState>,
+    Json(body): Json<CommandRequest>,
+) -> (StatusCode, Json<TuiCommandResponse>) {
+    if body.argv.is_empty() {
+        return bad_request("argv must contain at least one command token".into());
+    }
+    dispatch_job(&state, TuiApiRequest::Command(body.argv)).await
+}
+
+async fn post_plan(
+    State(state): State<HttpState>,
+    Json(body): Json<SimpleSendRequest>,
+) -> (StatusCode, Json<TuiCommandResponse>) {
+    dispatch_job(
+        &state,
+        TuiApiRequest::PlanSimpleSend {
+            recipient: body.recipient,
+            amount_nicks: body.amount_nicks,
+        },
+    )
+    .await
+}
+
+async fn post_create_and_send(
+    State(state): State<HttpState>,
+    Json(body): Json<SimpleSendRequest>,
+) -> (StatusCode, Json<TuiCommandResponse>) {
+    dispatch_job(
+        &state,
+        TuiApiRequest::CreateAndSendSimple {
+            recipient: body.recipient,
+            amount_nicks: body.amount_nicks,
+        },
+    )
+    .await
+}
+
+async fn post_nns_register(
+    State(state): State<HttpState>,
+    Json(body): Json<NnsRequest>,
+) -> (StatusCode, Json<TuiCommandResponse>) {
+    dispatch_job(&state, TuiApiRequest::NnsRegister { name: body.name }).await
 }
 
 fn bad_request(msg: String) -> (StatusCode, Json<TuiCommandResponse>) {

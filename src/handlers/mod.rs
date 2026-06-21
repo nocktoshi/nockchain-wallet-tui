@@ -38,6 +38,19 @@ fn schedule_cmd(
     super::command_runner::schedule_wallet_command(store, rt, done_tx.clone(), cmd, label);
 }
 
+/// Current selection index for any catalog-driven list menu.
+fn menu_sel(screen: &Screen) -> usize {
+    match screen {
+        Screen::Keys { sel }
+        | Screen::KeysImport { sel }
+        | Screen::Notes { sel }
+        | Screen::Transactions { sel }
+        | Screen::Watch { sel }
+        | Screen::SignVerify { sel } => *sel,
+        _ => 0,
+    }
+}
+
 pub(crate) fn apply_send_simple_plan_result(
     store: &mut UIStore,
     result: SendSimplePlanCompletion,
@@ -129,12 +142,48 @@ pub(super) async fn dispatch_key(
         Screen::SendSimple { .. } => {
             send_simple::handle_send_simple(store, key, rt, done_tx, plan_done_tx).await
         }
-        Screen::Keys { .. } => menus::handle_keys(store, key, rt, terminal, done_tx).await,
-        Screen::KeysImport { .. } => menus::handle_keys_import(store, key).await,
-        Screen::Notes { .. } => menus::handle_notes(store, key, rt, terminal, done_tx).await,
-        Screen::Transactions { .. } => menus::handle_transactions(store, key).await,
-        Screen::Watch { .. } => menus::handle_watch(store, key).await,
-        Screen::SignVerify { .. } => menus::handle_sign(store, key).await,
+        Screen::Keys { .. } => {
+            let s = menu_sel(&store.state.screen);
+            Ok(menus::run_menu(
+                store, rt, done_tx, key, s, crate::actions::KEYS_ITEMS,
+                |sel| Screen::Keys { sel }, Screen::Home,
+            ))
+        }
+        Screen::KeysImport { .. } => {
+            let s = menu_sel(&store.state.screen);
+            Ok(menus::run_menu(
+                store, rt, done_tx, key, s, crate::actions::KEYS_IMPORT_ITEMS,
+                |sel| Screen::KeysImport { sel }, Screen::Keys { sel: 2 },
+            ))
+        }
+        Screen::Notes { .. } => {
+            let s = menu_sel(&store.state.screen);
+            Ok(menus::run_menu(
+                store, rt, done_tx, key, s, crate::actions::NOTES_ITEMS,
+                |sel| Screen::Notes { sel }, Screen::Home,
+            ))
+        }
+        Screen::Transactions { .. } => {
+            let s = menu_sel(&store.state.screen);
+            Ok(menus::run_menu(
+                store, rt, done_tx, key, s, crate::actions::TX_ITEMS,
+                |sel| Screen::Transactions { sel }, Screen::Home,
+            ))
+        }
+        Screen::Watch { .. } => {
+            let s = menu_sel(&store.state.screen);
+            Ok(menus::run_menu(
+                store, rt, done_tx, key, s, crate::actions::WATCH_ITEMS,
+                |sel| Screen::Watch { sel }, Screen::Home,
+            ))
+        }
+        Screen::SignVerify { .. } => {
+            let s = menu_sel(&store.state.screen);
+            Ok(menus::run_menu(
+                store, rt, done_tx, key, s, crate::actions::SIGN_ITEMS,
+                |sel| Screen::SignVerify { sel }, Screen::Home,
+            ))
+        }
         Screen::Settings { .. } => menus::handle_settings(store, key, rt),
         Screen::Quick { .. } => menus::handle_quick(store, key),
         Screen::TextPrompt { .. } => {

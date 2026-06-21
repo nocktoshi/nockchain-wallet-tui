@@ -1,5 +1,6 @@
 //! Interactive wallet TUI (ratatui + crossterm) for [`nockchain-wallet`].
 
+mod actions;
 mod app_state;
 mod clipboard;
 mod command_runner;

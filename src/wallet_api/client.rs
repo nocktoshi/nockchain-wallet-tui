@@ -9,16 +9,17 @@ use nockchain_wallet::command::{Commands, WatchSubcommand};
 
 use super::TuiCommandResponse;
 
-/// POST a wallet command (`argv` tokens, no program name) to the local API.
+/// POST a JSON body to an API path and decode the [`TuiCommandResponse`].
 ///
 /// Transport failures (API unreachable) are `Err`; command-level failures are carried inside
 /// `Ok(TuiCommandResponse { error: Some(_), .. })` so callers can still show partial output.
-pub(crate) async fn run_command(
+async fn post(
     api_listen: &str,
     api_token: &str,
-    argv: Vec<String>,
+    path: &str,
+    body: serde_json::Value,
 ) -> Result<TuiCommandResponse, String> {
-    let url = format!("{}/v1/wallet/command", api_base_url(api_listen));
+    let url = format!("{}{path}", api_base_url(api_listen));
     // No request timeout: sync-heavy commands (balance, create-tx) can run for minutes.
     let client = reqwest::Client::builder()
         .build()
@@ -26,7 +27,7 @@ pub(crate) async fn run_command(
     let resp = client
         .post(&url)
         .bearer_auth(api_token)
-        .json(&serde_json::json!({ "argv": argv }))
+        .json(&body)
         .send()
         .await
         .map_err(|e| format!("POST {url}: {e}"))?;
@@ -40,6 +41,62 @@ pub(crate) async fn run_command(
         let body = resp.text().await.unwrap_or_default();
         Err(format!("POST {url}: HTTP {status} {body}"))
     }
+}
+
+/// Run a generic wallet command (`argv` tokens, no program name).
+pub(crate) async fn run_command(
+    api_listen: &str,
+    api_token: &str,
+    argv: Vec<String>,
+) -> Result<TuiCommandResponse, String> {
+    post(api_listen, api_token, "/v1/wallet/command", serde_json::json!({ "argv": argv })).await
+}
+
+/// Planner preview for a simple send (no kernel poke).
+pub(crate) async fn plan_simple_send(
+    api_listen: &str,
+    api_token: &str,
+    recipient: &str,
+    amount_nicks: u64,
+) -> Result<TuiCommandResponse, String> {
+    post(
+        api_listen,
+        api_token,
+        "/v1/wallet/tx/plan",
+        serde_json::json!({ "recipient": recipient, "amount_nicks": amount_nicks }),
+    )
+    .await
+}
+
+/// Build + broadcast a simple send (create-tx then send-tx).
+pub(crate) async fn create_and_send_simple(
+    api_listen: &str,
+    api_token: &str,
+    recipient: &str,
+    amount_nicks: u64,
+) -> Result<TuiCommandResponse, String> {
+    post(
+        api_listen,
+        api_token,
+        "/v1/wallet/tx/create-and-send",
+        serde_json::json!({ "recipient": recipient, "amount_nicks": amount_nicks }),
+    )
+    .await
+}
+
+/// Register a `.nock` name (registry-payment create-tx then send-tx).
+pub(crate) async fn nns_register(
+    api_listen: &str,
+    api_token: &str,
+    name: &str,
+) -> Result<TuiCommandResponse, String> {
+    post(
+        api_listen,
+        api_token,
+        "/v1/wallet/nns/register",
+        serde_json::json!({ "name": name }),
+    )
+    .await
 }
 
 /// Build the wallet CLI `argv` (no program name) for a command — the wire request the API parses

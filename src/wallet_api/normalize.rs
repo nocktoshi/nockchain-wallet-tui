@@ -31,6 +31,64 @@ pub(crate) fn normalize(events: &[WalletEvent], markdown: &str, cmd: &Commands) 
     vec![report_from_markdown(cmd, markdown)]
 }
 
+/// Synthesize structured events the kernel doesn't emit yet (markdown-only commands), so clients
+/// consume typed data instead of scraping text. Each branch disappears once upstream grafts the
+/// real `[%wallet …]` effect (P6).
+pub(crate) fn augment_events_from_markdown(
+    events: &mut Vec<WalletEvent>,
+    markdown: &str,
+    cmd: &Commands,
+) {
+    match cmd {
+        Commands::ListActiveAddresses | Commands::ListMasterAddresses => {
+            if !events
+                .iter()
+                .any(|e| matches!(e, WalletEvent::AddressListV1 { .. }))
+            {
+                if let Some(ev) = synthesize_address_list(markdown, command_name(cmd)) {
+                    events.push(ev);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Parse `- Address: <b58>` / `- Version: <n>` pairs from list-addresses markdown.
+fn synthesize_address_list(markdown: &str, list_kind: &str) -> Option<WalletEvent> {
+    let mut rows = Vec::new();
+    let mut pending: Option<String> = None;
+    for line in markdown.lines() {
+        let t = line.trim();
+        if let Some(rest) = t.strip_prefix("- Address: ") {
+            if let Some(addr) = pending.take() {
+                rows.push(WalletAddressRowV1 {
+                    address_b58: addr,
+                    version: 0,
+                });
+            }
+            pending = Some(rest.trim().to_string());
+        } else if let Some(rest) = t.strip_prefix("- Version: ") {
+            if let Some(addr) = pending.take() {
+                rows.push(WalletAddressRowV1 {
+                    address_b58: addr,
+                    version: rest.trim().parse().unwrap_or(0),
+                });
+            }
+        }
+    }
+    if let Some(addr) = pending.take() {
+        rows.push(WalletAddressRowV1 {
+            address_b58: addr,
+            version: 0,
+        });
+    }
+    (!rows.is_empty()).then(|| WalletEvent::AddressListV1 {
+        list_kind: list_kind.to_string(),
+        rows,
+    })
+}
+
 /// Kebab CLI id for a command (matches the wallet's clap subcommand names; the P2 catalog reuses it).
 pub(crate) fn command_name(cmd: &Commands) -> &'static str {
     match cmd {
@@ -423,6 +481,22 @@ mod tests {
     #[test]
     fn empty_output_no_reports() {
         assert!(normalize(&[], "   ", &Commands::ShowBalance).is_empty());
+    }
+
+    #[test]
+    fn synthesizes_address_list_from_markdown() {
+        // Mirrors `do-list-active-addresses` markdown output.
+        let md = "## Addresses -- Signing\n- Address: 9yPePjfWAdUnzaQKyxcRXKRa5PpUzKKEwtpECBZsUYt9Jd7egSDEWoV\n- Version: 1\n---\n";
+        let mut events = Vec::new();
+        augment_events_from_markdown(&mut events, md, &Commands::ListActiveAddresses);
+        match events.as_slice() {
+            [WalletEvent::AddressListV1 { rows, .. }] => {
+                assert_eq!(rows.len(), 1);
+                assert_eq!(rows[0].address_b58, "9yPePjfWAdUnzaQKyxcRXKRa5PpUzKKEwtpECBZsUYt9Jd7egSDEWoV");
+                assert_eq!(rows[0].version, 1);
+            }
+            other => panic!("expected one AddressListV1, got {other:?}"),
+        }
     }
 
     #[test]
