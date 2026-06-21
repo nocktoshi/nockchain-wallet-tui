@@ -50,7 +50,7 @@ pub(crate) fn apply_ui_action(state: &mut UiState, action: UiAction) {
             state.job = Some(RunningJob { label, cmd });
             state.sync_progress = progress_rx;
         }
-        UiAction::BeginBalanceSidebarFetch { progress_rx } => {
+        UiAction::BeginBalanceSidebarFetch => {
             if !matches!(state.screen, Screen::Home) {
                 return;
             }
@@ -60,7 +60,7 @@ pub(crate) fn apply_ui_action(state: &mut UiState, action: UiAction) {
             state.balance_panel.loading = true;
             state.balance_panel.error = None;
             state.balance_job_nonce = state.balance_job_nonce.wrapping_add(1);
-            state.sync_progress = Some(progress_rx);
+            state.sync_progress = None;
         }
         UiAction::JobCompleted {
             result,

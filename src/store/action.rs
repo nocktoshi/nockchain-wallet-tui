@@ -25,10 +25,9 @@ pub(crate) enum UiAction {
         label: String,
         progress_rx: Option<watch::Receiver<(usize, usize)>>,
     },
-    /// Home balance refresh (receiver only; sender held by spawned task).
-    BeginBalanceSidebarFetch {
-        progress_rx: watch::Receiver<(usize, usize)>,
-    },
+    /// Home balance refresh start. Routed through the HTTP API, so there is no in-process sync
+    /// progress channel — the hero shows a plain spinner.
+    BeginBalanceSidebarFetch,
     JobCompleted {
         result: Result<(), String>,
         events: Vec<nockchain_wallet::wallet_outcome::WalletEvent>,

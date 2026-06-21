@@ -197,7 +197,9 @@ fn http_completion(resp: Result<TuiCommandResponse, String>) -> JobCompletion {
     }
 }
 
-/// Refresh balance text for the main-menu sidebar (does not swap to [`Screen::Running`]).
+/// Refresh balance for the home hero through the loopback HTTP API — same client path as a web UI
+/// and as the identity / master-address fetches, so the `api_job_loop` serializes them all. The
+/// in-process sync-progress channel is gone (it can't cross HTTP); the hero shows a plain spinner.
 pub(crate) fn schedule_balance_sidebar_refresh(
     store: &mut UIStore,
     rt: &TuiRuntime,
@@ -209,23 +211,30 @@ pub(crate) fn schedule_balance_sidebar_refresh(
     if store.state.balance_panel.loading {
         return;
     }
-    rt.wallet_event_sink.lock().unwrap().clear();
-    let (progress_tx, progress_rx) = watch::channel((0usize, 5usize));
-    store.dispatch(UiAction::BeginBalanceSidebarFetch { progress_rx });
+    store.dispatch(UiAction::BeginBalanceSidebarFetch);
 
     let nonce = store.state.balance_job_nonce;
     let rt = rt.clone();
-
     let tx = done_tx.clone();
     tokio::task::spawn_local(async move {
-        let outcome =
-            run_command_on_runtime(&rt, Commands::ShowBalance, Some(progress_tx), None).await;
-        let events = outcome
-            .as_ref()
-            .map(|d| d.events.clone())
-            .unwrap_or_default();
-        let exec_result = outcome.map(|_| ());
-        let _ = tx.send(Msg::Balance((nonce, exec_result, events)));
+        let listen = crate::session::current_api_listen(&rt);
+        let resp = run_command_http(
+            &listen,
+            rt.api_auth_token.as_ref(),
+            vec!["show-balance".to_string()],
+        )
+        .await;
+        let (result, events) = match resp {
+            Ok(r) => {
+                let result = match r.error {
+                    Some(e) => Err(NockAppError::OtherError(e)),
+                    None => Ok(()),
+                };
+                (result, r.events)
+            }
+            Err(transport) => (Err(NockAppError::OtherError(transport)), Vec::new()),
+        };
+        let _ = tx.send(Msg::Balance((nonce, result, events)));
     });
 }
 
