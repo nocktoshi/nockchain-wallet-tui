@@ -20,6 +20,26 @@ pub(super) async fn handle_home(
     rt: &TuiRuntime,
     msg_tx: &mpsc::UnboundedSender<Msg>,
 ) -> Result<TuiControl, NockAppError> {
+    // The wallet dropdown, while open, captures navigation keys before anything else.
+    if store.state.master_picker.open {
+        match key.code {
+            KeyCode::Up | KeyCode::Char('k') => store.dispatch(UiAction::MoveMasterPickerSel { delta: -1 }),
+            KeyCode::Down | KeyCode::Char('j') => store.dispatch(UiAction::MoveMasterPickerSel { delta: 1 }),
+            KeyCode::Esc => store.dispatch(UiAction::CloseMasterPicker),
+            KeyCode::Enter => select_active_master(store, rt, msg_tx),
+            _ => {}
+        }
+        return Ok(TuiControl::Continue);
+    }
+    // `w` opens the wallet picker (wallet tab only, and only when there's more than one wallet).
+    if store.state.home_tab == 0
+        && store.state.master_picker.has_choice()
+        && matches!(key.code, KeyCode::Char('w'))
+    {
+        store.dispatch(UiAction::ToggleMasterPicker);
+        return Ok(TuiControl::Continue);
+    }
+
     match key.code {
         KeyCode::Left | KeyCode::Char('h') => {
             store.dispatch(UiAction::HomeTabPrev);
@@ -108,6 +128,35 @@ pub(super) async fn handle_home(
             store.dispatch(UiAction::SetMenuSel(sel));
             super::menus::navigate_main_menu_item(store, i);
             Ok(TuiControl::Continue)
+        }
+    }
+}
+
+/// Confirm the highlighted wallet in the dropdown: if it isn't already active, switch to it via
+/// `set-active-master-address`. The completion refreshes the home view (see the `Msg::Job` handler).
+fn select_active_master(
+    store: &mut UIStore,
+    rt: &TuiRuntime,
+    msg_tx: &mpsc::UnboundedSender<Msg>,
+) {
+    let chosen = store
+        .state
+        .master_picker
+        .addresses
+        .get(store.state.master_picker.sel)
+        .cloned();
+    store.dispatch(UiAction::CloseMasterPicker);
+    if let Some(row) = chosen {
+        if !row.active {
+            schedule_cmd(
+                store,
+                rt,
+                msg_tx,
+                Commands::SetActiveMasterAddress {
+                    address_b58: row.address_b58,
+                },
+                "Switch wallet",
+            );
         }
     }
 }

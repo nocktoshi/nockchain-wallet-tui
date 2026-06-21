@@ -117,6 +117,10 @@ pub(super) async fn dispatch_key(
             return Ok(TuiControl::Continue);
         }
     }
+    // Returning to home from any other route should re-derive the wallet view (balance cascades to
+    // identity + master-address picker via the Msg::Balance handler).
+    let was_home = matches!(store.state.screen, Screen::Home);
+
     let result = match &mut store.state.screen {
         Screen::Splash => Ok(TuiControl::Continue),
         Screen::Home => home::handle_home(store, key, rt, msg_tx).await,
@@ -222,6 +226,12 @@ pub(super) async fn dispatch_key(
         Screen::CreateTx { .. } => ct_dispatch::handle_create_tx(store, key, rt, msg_tx).await,
         Screen::ErrorScreen { .. } => error::error_screen(store, key, rt, terminal, msg_tx).await,
     };
+
+    // Just returned to home from elsewhere: refresh the balance (which cascades to the identity and
+    // master-address picker). Guards inside the scheduler drop redundant/in-flight fetches.
+    if !was_home && matches!(store.state.screen, Screen::Home) {
+        super::command_runner::schedule_balance_sidebar_refresh(store, rt, msg_tx);
+    }
 
     // After any handler (including menu navigation), if we are now on the NNS buy screen
     // with no owned names loaded yet, start the fetch immediately so the loading indicator

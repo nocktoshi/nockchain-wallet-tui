@@ -125,6 +125,42 @@ pub(crate) fn apply_ui_action(state: &mut UiState, action: UiAction) {
         UiAction::SetMenuSel(sel) => {
             state.menu_sel = sel;
         }
+        UiAction::BeginMasterAddressesFetch => {
+            state.master_picker.loading = true;
+        }
+        UiAction::MasterAddressesLoaded { rows } => {
+            state.master_picker.loading = false;
+            state.master_picker.addresses = rows;
+            // Park the dropdown highlight on the active row (clamped if the list shrank).
+            let active = state.master_picker.active_index().unwrap_or(0);
+            let len = state.master_picker.addresses.len();
+            state.master_picker.sel = active.min(len.saturating_sub(1));
+            if !state.master_picker.has_choice() {
+                state.master_picker.open = false;
+            }
+        }
+        UiAction::ToggleMasterPicker => {
+            if !state.master_picker.has_choice() {
+                state.master_picker.open = false;
+                return;
+            }
+            state.master_picker.open = !state.master_picker.open;
+            if state.master_picker.open {
+                state.master_picker.sel = state.master_picker.active_index().unwrap_or(0);
+            }
+        }
+        UiAction::MoveMasterPickerSel { delta } => {
+            let len = state.master_picker.addresses.len();
+            if len == 0 {
+                return;
+            }
+            let cur = state.master_picker.sel.min(len - 1) as i32;
+            let next = (cur + delta).rem_euclid(len as i32);
+            state.master_picker.sel = next as usize;
+        }
+        UiAction::CloseMasterPicker => {
+            state.master_picker.open = false;
+        }
         UiAction::BeginPriceFetch => {
             if state.price.loading {
                 return;
@@ -196,6 +232,9 @@ fn apply_job_completed(
     state.sync_progress = None;
     state.last_command_events = events.clone();
     state.last_command_status = None;
+    // A new completion supersedes any prior floating toast (e.g. "Address copied"); the ✓ panel
+    // header and the toast are mutually exclusive, set fresh below.
+    state.toast = None;
     let display = output;
     // The route stayed put while the job ran; transition it now based on the command.
     let Some(cmd) = state.job.take().map(|j| j.cmd) else {
@@ -320,6 +359,132 @@ fn error_actions_for_command(cmd: &Commands) -> &'static [&'static str] {
     match cmd {
         Commands::CreateTx { .. } => CT_ERR_ACTIONS,
         _ => GENERIC_ERR,
+    }
+}
+
+#[cfg(test)]
+mod single_confirmation_tests {
+    use super::*;
+    use crate::app_state::{status_modal_visible, UiState};
+    use crate::screens::{RunningJob, Screen};
+
+    fn running(cmd: Commands) -> UiState {
+        let mut s = UiState::new(Screen::Home);
+        s.job = Some(RunningJob {
+            label: "running".into(),
+            cmd,
+        });
+        s
+    }
+
+    /// Success *with* output: one scrollable panel carrying the green ✓ header, no floating toast,
+    /// so a single Enter (DismissStatusOutput) clears it. A stray earlier toast must not survive.
+    #[test]
+    fn success_with_output_uses_panel_not_toast() {
+        let mut s = running(Commands::ListNotes);
+        s.toast = Some("Address copied to clipboard".into());
+        apply_job_completed(&mut s, Ok(()), vec![], "## Notes\n- count: 0".into());
+
+        assert!(s.toast.is_none(), "stray/old toast must be cleared");
+        assert_eq!(s.last_command_status.as_deref(), Some("Notes listed."));
+        assert!(!s.last_command_output.is_empty());
+        assert!(s.job.is_none());
+        // Panel visible -> the single-key dismiss path is DismissStatusOutput, not TakeToast.
+        assert!(status_modal_visible(&s));
+    }
+
+    /// Success *without* output: only a floating toast, dismissed by the single TakeToast keypress;
+    /// no status panel and no ✓ header competing for a second dismiss.
+    #[test]
+    fn success_without_output_uses_toast_not_panel() {
+        let mut s = running(Commands::ExportKeys);
+        apply_job_completed(&mut s, Ok(()), vec![], String::new());
+
+        assert_eq!(s.toast.as_deref(), Some("Export completed."));
+        assert!(s.last_command_status.is_none());
+        assert!(s.last_command_output.is_empty());
+        // No panel (output empty, no job) -> nothing left to dismiss after the toast.
+        assert!(!status_modal_visible(&s));
+    }
+}
+
+#[cfg(test)]
+mod master_picker_tests {
+    use super::*;
+    use crate::app_state::UiState;
+    use crate::screens::Screen;
+    use crate::wallet_api::MasterAddressRow;
+
+    fn row(addr: &str, active: bool) -> MasterAddressRow {
+        MasterAddressRow {
+            address_b58: addr.into(),
+            version: 1,
+            active,
+        }
+    }
+
+    /// Loading addresses parks the highlight on the active row and only enables the dropdown when
+    /// there is more than one wallet.
+    #[test]
+    fn loaded_parks_selection_on_active_and_gates_choice() {
+        let mut s = UiState::new(Screen::Home);
+        apply_ui_action(
+            &mut s,
+            UiAction::MasterAddressesLoaded {
+                rows: vec![row("aaa", false), row("bbb", true), row("ccc", false)],
+            },
+        );
+        assert_eq!(s.master_picker.sel, 1);
+        assert!(s.master_picker.has_choice());
+        assert_eq!(s.master_picker.active_address(), Some("bbb"));
+
+        // A single wallet -> no dropdown affordance, force-closed.
+        s.master_picker.open = true;
+        apply_ui_action(
+            &mut s,
+            UiAction::MasterAddressesLoaded {
+                rows: vec![row("only", true)],
+            },
+        );
+        assert!(!s.master_picker.has_choice());
+        assert!(!s.master_picker.open);
+    }
+
+    /// Toggle opens (onto the active row) only with a real choice; movement wraps.
+    #[test]
+    fn toggle_and_move_wrap() {
+        let mut s = UiState::new(Screen::Home);
+        apply_ui_action(
+            &mut s,
+            UiAction::MasterAddressesLoaded {
+                rows: vec![row("aaa", false), row("bbb", true)],
+            },
+        );
+        apply_ui_action(&mut s, UiAction::ToggleMasterPicker);
+        assert!(s.master_picker.open);
+        assert_eq!(s.master_picker.sel, 1, "opens on the active row");
+
+        apply_ui_action(&mut s, UiAction::MoveMasterPickerSel { delta: 1 });
+        assert_eq!(s.master_picker.sel, 0, "wraps past the end");
+        apply_ui_action(&mut s, UiAction::MoveMasterPickerSel { delta: -1 });
+        assert_eq!(s.master_picker.sel, 1, "wraps before the start");
+
+        apply_ui_action(&mut s, UiAction::CloseMasterPicker);
+        assert!(!s.master_picker.open);
+    }
+
+    /// A single-wallet picker never opens.
+    #[test]
+    fn toggle_noop_without_choice() {
+        let mut s = UiState::new(Screen::Home);
+        apply_ui_action(
+            &mut s,
+            UiAction::MasterAddressesLoaded {
+                rows: vec![row("solo", true)],
+            },
+        );
+        apply_ui_action(&mut s, UiAction::ToggleMasterPicker);
+        assert!(!s.master_picker.open);
     }
 }
 

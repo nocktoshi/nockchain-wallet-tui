@@ -3,7 +3,7 @@
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::Paragraph;
+use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph};
 use ratatui::Frame;
 
 use super::button::{balance_gradient_bg_for_widget, paint_balance_button_gradient, BALANCE_THEME};
@@ -105,6 +105,64 @@ pub(crate) fn draw_wallet_tab(f: &mut Frame<'_>, app: &AppState, area: Rect, tic
     }
     draw_cta_row(f, chunks[1]);
     draw_cta_hints(f, chunks[2]);
+
+    // The wallet dropdown overlays everything else on the wallet tab when expanded.
+    if app.master_picker.open {
+        draw_master_picker_popup(f, app, area);
+    }
+}
+
+/// Expanded wallet dropdown: all master addresses, the active one flagged, current row highlighted.
+fn draw_master_picker_popup(f: &mut Frame<'_>, app: &AppState, area: Rect) {
+    let addresses = &app.master_picker.addresses;
+    if addresses.is_empty() {
+        return;
+    }
+    let rows = addresses.len() as u16;
+    let height = (rows + 2).clamp(3, area.height.saturating_sub(2).max(3));
+    let width = area.width.saturating_sub(6).clamp(24, 72);
+    let x = area.x + area.width.saturating_sub(width) / 2;
+    let y = area.y + 2;
+    let popup = Rect::new(x, y, width, height);
+    f.render_widget(Clear, popup);
+
+    let inner_w = width.saturating_sub(4) as usize;
+    let items: Vec<ListItem> = addresses
+        .iter()
+        .map(|row| {
+            let dot = if row.active { "● " } else { "  " };
+            let suffix = if row.active { "  (active)" } else { "" };
+            let addr = truncate_display(&row.address_b58, inner_w.saturating_sub(dot.len() + suffix.len()));
+            ListItem::new(Line::from(Span::styled(
+                format!("{dot}{addr}{suffix}"),
+                Style::default().fg(Color::Rgb(220, 235, 220)),
+            )))
+        })
+        .collect();
+
+    let mut state = ListState::default();
+    state.select(Some(app.master_picker.sel.min(addresses.len().saturating_sub(1))));
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(Span::styled(
+                    " Select wallet ",
+                    Style::default()
+                        .fg(THEME_ACCENT_GREEN)
+                        .add_modifier(Modifier::BOLD),
+                ))
+                .border_style(Style::default().fg(THEME_ACCENT_GREEN))
+                .style(Style::default().bg(THEME_BG_DEEP)),
+        )
+        .highlight_style(
+            Style::default()
+                .fg(Color::White)
+                .bg(THEME_ACCENT_GREEN)
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol("▸ ");
+    f.render_stateful_widget(list, popup, &mut state);
 }
 
 fn draw_balance_loading(f: &mut Frame<'_>, app: &AppState, area: Rect, tick: u64) {
@@ -184,7 +242,20 @@ fn draw_balance_identity(f: &mut Frame<'_>, app: &AppState, area: Rect, button: 
         .add_modifier(Modifier::BOLD);
     let sub = Style::default().fg(BALANCE_ADDRESS_SUBTEXT);
 
-    let (primary, secondary) = if app.balance_panel.identity_loading {
+    let (primary, secondary) = if app.master_picker.has_choice() {
+        // Multiple wallets: the identity line becomes the active-master dropdown affordance.
+        let active = app
+            .master_picker
+            .active_address()
+            .map(|a| truncate_display(a, 18))
+            .unwrap_or_else(|| "select wallet".to_string());
+        let n = app.master_picker.addresses.len();
+        let idx = app.master_picker.active_index().map(|i| i + 1).unwrap_or(0);
+        (
+            format!("▾ {active}"),
+            Some(format!("wallet {idx}/{n}  ·  w to switch")),
+        )
+    } else if app.balance_panel.identity_loading {
         ("…".to_string(), None)
     } else if let Some(ref name) = app.balance_panel.nockname {
         let addr = app

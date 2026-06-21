@@ -14,7 +14,10 @@ pub(crate) use client::{
     run_command as run_command_http,
 };
 pub(crate) use executor::{restart_api_server_if_listen_changed, run_api_job_loop};
-pub(crate) use normalize::{augment_events_from_markdown, normalize, parse_markdown_to_sections};
+pub(crate) use normalize::{
+    augment_events_from_markdown, normalize, parse_markdown_to_sections, parse_master_addresses,
+    MasterAddressRow,
+};
 pub(crate) use report::{reports_to_text, Report, TuiCommandResponse, TUI_OUTCOME_SCHEMA};
 pub(crate) use server::{spawn_http_server, ApiServerHandle, TuiApiJob, TuiApiRequest};
 pub(crate) use state::{

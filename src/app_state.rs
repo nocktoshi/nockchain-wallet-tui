@@ -60,6 +60,40 @@ pub(crate) struct BalancePanelState {
     pub nockname: Option<String>,
 }
 
+/// Home wallet picker: the master addresses from `list-master-addresses` and dropdown UI state.
+/// Shown as a selectable dropdown only when more than one master address exists.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct MasterPickerState {
+    /// All master addresses with the active one flagged (parsed from list-master-addresses).
+    pub addresses: Vec<crate::wallet_api::MasterAddressRow>,
+    /// A `list-master-addresses` fetch is in flight.
+    pub loading: bool,
+    /// The dropdown is expanded.
+    pub open: bool,
+    /// Highlighted row while the dropdown is open.
+    pub sel: usize,
+}
+
+impl MasterPickerState {
+    /// Index of the active master address, if known.
+    pub fn active_index(&self) -> Option<usize> {
+        self.addresses.iter().position(|a| a.active)
+    }
+
+    /// The active master address string, if known.
+    pub fn active_address(&self) -> Option<&str> {
+        self.addresses
+            .iter()
+            .find(|a| a.active)
+            .map(|a| a.address_b58.as_str())
+    }
+
+    /// Show the dropdown affordance only when there is a real choice to make.
+    pub fn has_choice(&self) -> bool {
+        self.addresses.len() > 1
+    }
+}
+
 impl Default for BalancePanelState {
     fn default() -> Self {
         Self {
@@ -86,7 +120,7 @@ pub(crate) struct UiState {
     pub sync_progress: Option<watch::Receiver<(usize, usize)>>,
     /// Terminal text rendered from [`Self::last_command_events`] for the output panel.
     pub last_command_output: String,
-    /// Green ✓ success header for the output panel (set only on a command success *with* output;
+    /// Green ✅ success header for the output panel (set only on a command success *with* output;
     /// `None` for info text like help/curl). Folds the success confirmation into the one panel.
     pub last_command_status: Option<String>,
     /// Structured kernel events from the last wallet command (data layer).
@@ -96,6 +130,8 @@ pub(crate) struct UiState {
     /// Scroll position for menu [`List`](ratatui::widgets::List) widgets (long menus).
     pub list_state: ListState,
     pub balance_panel: BalancePanelState,
+    /// Home wallet (master-address) dropdown picker.
+    pub master_picker: MasterPickerState,
     /// Bumped when starting a sidebar balance fetch or any queued wallet command.
     pub balance_job_nonce: u64,
     pub ui_fx: UiFx,
@@ -123,6 +159,7 @@ impl UiState {
             output_scroll: 0,
             list_state: ListState::default(),
             balance_panel: BalancePanelState::default(),
+            master_picker: MasterPickerState::default(),
             balance_job_nonce: 0,
             ui_fx: UiFx::default(),
             home_tab: 0,

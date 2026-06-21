@@ -24,6 +24,7 @@ use super::msg::Msg;
 use super::screens::{Screen, TuiControl};
 use super::store::{UIStore, UiAction};
 use crate::wallet_api::TuiApiJob;
+use nockchain_wallet::command::Commands;
 
 pub(crate) fn io_err(e: io::Error) -> NockAppError {
     NockAppError::OtherError(format!("terminal io: {e}"))
@@ -40,7 +41,20 @@ pub(super) async fn run(
 fn handle_msg(store: &mut UIStore, rt: &TuiRuntime, msg: Msg, msg_tx: &mpsc::UnboundedSender<Msg>) {
     match msg {
         Msg::Job((res, events, output)) => {
+            // Capture the completing command before the reducer consumes the running job, so we can
+            // refresh the home wallet view after switching the active master address.
+            let was_set_active = store
+                .state
+                .job
+                .as_ref()
+                .is_some_and(|j| matches!(j.cmd, Commands::SetActiveMasterAddress { .. }));
+            let ok = res.is_ok();
             command_runner::apply_job_result(store, res, events, output, msg_tx);
+            if was_set_active && ok {
+                // Re-derive balance → identity → master list for the new active wallet.
+                command_runner::schedule_balance_sidebar_refresh(store, rt, msg_tx);
+                command_runner::schedule_master_addresses_fetch(store, rt, msg_tx);
+            }
         }
         Msg::Balance((nonce, res, events)) => {
             let ok = res.is_ok();
@@ -48,6 +62,7 @@ fn handle_msg(store: &mut UIStore, rt: &TuiRuntime, msg: Msg, msg_tx: &mpsc::Unb
             if ok {
                 command_runner::schedule_price_fetch(store, msg_tx);
                 command_runner::schedule_home_identity_fetch(store, rt, msg_tx);
+                command_runner::schedule_master_addresses_fetch(store, rt, msg_tx);
             }
         }
         Msg::Plan(result) => handlers::apply_send_simple_plan_result(store, result),
@@ -60,6 +75,9 @@ fn handle_msg(store: &mut UIStore, rt: &TuiRuntime, msg: Msg, msg_tx: &mpsc::Unb
         }
         Msg::Identity((address, nockname)) => {
             command_runner::apply_home_identity_result(store, address, nockname);
+        }
+        Msg::MasterAddresses(rows) => {
+            store.dispatch(UiAction::MasterAddressesLoaded { rows });
         }
         Msg::Price(result) => match result {
             Ok(usd) => store.dispatch(UiAction::PriceFetched { usd_per_coin: usd }),

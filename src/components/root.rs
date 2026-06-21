@@ -302,7 +302,7 @@ fn draw_status_panel(
     // separate toast); otherwise it's a plain "Output" header.
     let title = match &app.last_command_status {
         Some(status) if !is_running => Span::styled(
-            format!("✓ {status}"),
+            format!("✅ {status}"),
             Style::default()
                 .fg(THEME_ACCENT_GREEN)
                 .add_modifier(Modifier::BOLD),
@@ -347,13 +347,13 @@ fn draw_status_panel(
 fn status_modal_hint_line(app: &AppState) -> Line<'static> {
     if app.job.is_some() {
         return Line::from(vec![
-            Span::styled("Working… ", Style::default().fg(Color::Yellow)),
-            Span::styled("(see spinner above)", Style::default().fg(Color::DarkGray)),
+            Span::styled("⏳ Working… ", Style::default().fg(Color::Yellow)),
+            Span::styled("(almost ready)", Style::default().fg(Color::DarkGray)),
         ]);
     }
     if let Some(ref toast) = app.toast {
         return Line::from(vec![
-            Span::styled(format!("✓ {toast}"), Style::default().fg(Color::Green)),
+            Span::styled(format!("✅ {toast}"), Style::default().fg(Color::Green)),
             Span::raw("  ·  "),
             Span::styled("any key", Style::default().fg(Color::DarkGray)),
             Span::raw(" dismiss"),
@@ -392,14 +392,29 @@ fn status_modal_hint_line(app: &AppState) -> Line<'static> {
 
 fn activity_hint_line(app: &AppState) -> Line<'static> {
     if matches!(app.screen, Screen::Home) {
-        return Line::from(vec![
+        if app.master_picker.open {
+            return Line::from(vec![
+                Span::styled("↑/↓ ", Style::default().fg(Color::Yellow)),
+                Span::raw("choose  "),
+                Span::styled("Enter ", Style::default().fg(Color::Yellow)),
+                Span::raw("switch  "),
+                Span::styled("Esc ", Style::default().fg(THEME_MUTED)),
+                Span::raw("cancel"),
+            ]);
+        }
+        let mut spans = vec![
             Span::styled("←/→ ", Style::default().fg(Color::Yellow)),
             Span::raw("tabs  "),
-            Span::styled("s/r/b ", Style::default().fg(Color::Yellow)),
+            Span::styled("s/r/n ", Style::default().fg(Color::Yellow)),
             Span::raw("actions  "),
-            Span::styled("Esc ", Style::default().fg(THEME_MUTED)),
-            Span::raw("quit"),
-        ]);
+        ];
+        if app.home_tab == 0 && app.master_picker.has_choice() {
+            spans.push(Span::styled("w ", Style::default().fg(Color::Yellow)));
+            spans.push(Span::raw("wallet  "));
+        }
+        spans.push(Span::styled("Esc ", Style::default().fg(THEME_MUTED)));
+        spans.push(Span::raw("quit"));
+        return Line::from(spans);
     }
     if matches!(app.screen, Screen::Receive { .. }) {
         return Line::from(vec![
@@ -422,7 +437,7 @@ fn activity_hint_line(app: &AppState) -> Line<'static> {
     if let Screen::SendSimple { phase, .. } = &app.screen {
         return match phase {
             SendSimplePhase::Planning => Line::from(vec![Span::styled(
-                "Planning transaction…",
+                "⏳ Planning transaction…",
                 Style::default().fg(Color::Yellow),
             )]),
             SendSimplePhase::Review { .. } => Line::from(vec![

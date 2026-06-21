@@ -249,7 +249,7 @@ pub(super) fn handle_quick(
 
 fn set_output(store: &mut UIStore, text: String) {
     store.state.last_command_output = text;
-    store.state.last_command_status = None; // info text, not a command success — no ✓ header
+    store.state.last_command_status = None; // info text, not a command success — no ✅ header
     store.state.output_scroll = 0;
 }
 

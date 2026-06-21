@@ -56,6 +56,20 @@ pub(crate) enum UiAction {
     HomeTabNext,
     HomeTabPrev,
     SetMenuSel(usize),
+    /// A `list-master-addresses` fetch for the home wallet picker started.
+    BeginMasterAddressesFetch,
+    /// Master addresses loaded for the home wallet picker.
+    MasterAddressesLoaded {
+        rows: Vec<crate::wallet_api::MasterAddressRow>,
+    },
+    /// Expand/collapse the home wallet dropdown (resets the highlight to the active row on open).
+    ToggleMasterPicker,
+    /// Move the highlighted row in the open wallet dropdown.
+    MoveMasterPickerSel {
+        delta: i32,
+    },
+    /// Collapse the home wallet dropdown without selecting.
+    CloseMasterPicker,
     BeginPriceFetch,
     PriceFetched {
         usd_per_coin: f64,

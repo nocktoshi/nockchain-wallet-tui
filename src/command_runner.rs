@@ -61,6 +61,9 @@ pub(crate) type OwnedNnsNamesCompletion = Result<Vec<String>, String>;
 /// Home identity: active address + optional primary `.nock` name.
 pub(crate) type HomeIdentityCompletion = (Option<String>, Option<String>);
 
+/// Master addresses for the home wallet picker (full list with the active one flagged).
+pub(crate) type MasterAddressesCompletion = Vec<crate::wallet_api::MasterAddressRow>;
+
 /// Shared wallet + snapshot for spawned TUI jobs (`tui::run` wraps with [`Arc`]).
 #[derive(Clone)]
 pub(crate) struct TuiRuntime {
@@ -296,6 +299,37 @@ pub(crate) fn apply_home_identity_result(
     nockname: Option<String>,
 ) {
     store.dispatch(UiAction::HomeIdentityCompleted { address, nockname });
+}
+
+/// Fetch `list-master-addresses` for the home wallet dropdown. Uses the direct runtime path (not
+/// the loopback HTTP API) because the active-wallet marker (`**(active)**`) lives only in the kernel
+/// markdown, which the typed `events`/`reports` contract doesn't carry.
+pub(crate) fn schedule_master_addresses_fetch(
+    store: &mut UIStore,
+    rt: &TuiRuntime,
+    done_tx: &mpsc::UnboundedSender<Msg>,
+) {
+    if !matches!(store.state.screen, Screen::Home) {
+        return;
+    }
+    if store.state.master_picker.loading {
+        return;
+    }
+    store.dispatch(UiAction::BeginMasterAddressesFetch);
+
+    let rt = rt.clone();
+    let tx = done_tx.clone();
+    tokio::task::spawn_local(async move {
+        let outcome =
+            run_command_on_runtime(&rt, Commands::ListMasterAddresses, None, None).await;
+        let rows = match outcome {
+            // Read the captured markdown immediately (no intervening await that could clobber the
+            // shared sink) and parse the active-flagged rows.
+            Ok(_) => crate::wallet_api::parse_master_addresses(&rt.tui_markdown_sink.lock().unwrap()),
+            Err(_) => Vec::new(),
+        };
+        let _ = tx.send(Msg::MasterAddresses(rows));
+    });
 }
 
 pub(crate) fn apply_job_result(

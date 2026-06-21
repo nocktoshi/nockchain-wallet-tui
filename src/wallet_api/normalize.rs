@@ -89,6 +89,49 @@ fn synthesize_address_list(markdown: &str, list_kind: &str) -> Option<WalletEven
     })
 }
 
+/// One row of `list-master-addresses` output, with the active marker preserved.
+///
+/// The upstream typed event ([`WalletEvent::AddressListV1`]) carries no `active` flag, so the home
+/// wallet picker parses it from the kernel markdown here (the single markdown-parsing site).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct MasterAddressRow {
+    pub address_b58: String,
+    pub version: u64,
+    pub active: bool,
+}
+
+/// Parse `- v{N}: <b58> [**(active)**]` lines from `list-master-addresses` markdown.
+pub(crate) fn parse_master_addresses(markdown: &str) -> Vec<MasterAddressRow> {
+    let mut rows = Vec::new();
+    for line in markdown.lines() {
+        let t = line.trim();
+        // Master rows look like `- v1: <b58> **(active)**`; skip `- count: N`, headings, etc.
+        let Some(rest) = t.strip_prefix("- v") else {
+            continue;
+        };
+        let Some((ver, value)) = rest.split_once(':') else {
+            continue;
+        };
+        let Ok(version) = ver.trim().parse::<u64>() else {
+            continue;
+        };
+        let value = value.trim();
+        let active = value.contains("(active)");
+        // The address is the first whitespace-delimited token; the `**(active)**` marker (if any)
+        // follows after a space, so this drops it cleanly.
+        let address_b58 = value.split_whitespace().next().unwrap_or_default().to_string();
+        if address_b58.is_empty() {
+            continue;
+        }
+        rows.push(MasterAddressRow {
+            address_b58,
+            version,
+            active,
+        });
+    }
+    rows
+}
+
 /// Kebab CLI id for a command (matches the wallet's clap subcommand names; the P2 catalog reuses it).
 pub(crate) fn command_name(cmd: &Commands) -> &'static str {
     match cmd {
@@ -523,6 +566,29 @@ mod tests {
             }
             other => panic!("expected one AddressListV1, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn parses_master_addresses_with_active_marker() {
+        let md = "## Addresses (list-master-addresses)\n- count: 2\n- v1: B2Q5zEZbG3bYKP53FWS91ZnsGceXABaWmiE3qNcpQNfqVRXM3GLLGrj\n- v1: 8oKQQ2UvhaFkEJYGSq2F5rfeht4nAshvoDCiNCd6KAgjrmujpwrEG3M **(active)**\n";
+        let rows = parse_master_addresses(md);
+        assert_eq!(rows.len(), 2);
+        assert_eq!(
+            rows[0].address_b58,
+            "B2Q5zEZbG3bYKP53FWS91ZnsGceXABaWmiE3qNcpQNfqVRXM3GLLGrj"
+        );
+        assert!(!rows[0].active);
+        assert_eq!(
+            rows[1].address_b58,
+            "8oKQQ2UvhaFkEJYGSq2F5rfeht4nAshvoDCiNCd6KAgjrmujpwrEG3M"
+        );
+        assert!(rows[1].active);
+        assert_eq!(rows[1].version, 1);
+    }
+
+    #[test]
+    fn parses_master_addresses_empty_when_none() {
+        assert!(parse_master_addresses("## Addresses\n- count: 0\n").is_empty());
     }
 
     #[test]
