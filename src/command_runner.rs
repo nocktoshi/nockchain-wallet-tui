@@ -10,6 +10,7 @@ use tokio::sync::{mpsc, watch, Mutex};
 
 use super::screens::Screen;
 use super::store::{UIStore, UiAction};
+use crate::msg::Msg;
 use crate::wallet_api::{
     command_to_argv, create_and_send_simple, nns_register, plan_simple_send, reports_to_text,
     run_command_http, TuiApiJob, TuiCommandResponse, WalletSessionState,
@@ -146,7 +147,7 @@ async fn finalize_outcome(
 pub(crate) fn schedule_wallet_command(
     store: &mut UIStore,
     rt: &TuiRuntime,
-    done_tx: mpsc::UnboundedSender<JobCompletion>,
+    done_tx: mpsc::UnboundedSender<Msg>,
     cmd: Commands,
     label: impl Into<String>,
 ) {
@@ -162,7 +163,7 @@ pub(crate) fn schedule_wallet_command(
 
     let rt = rt.clone();
     tokio::task::spawn_local(async move {
-        let _ = done_tx.send(run_command_via_api(&rt, &cmd).await);
+        let _ = done_tx.send(Msg::Job(run_command_via_api(&rt, &cmd).await));
     });
 }
 
@@ -194,7 +195,7 @@ fn http_completion(resp: Result<TuiCommandResponse, String>) -> JobCompletion {
 pub(crate) fn schedule_balance_sidebar_refresh(
     store: &mut UIStore,
     rt: &TuiRuntime,
-    done_tx: &mpsc::UnboundedSender<BalanceRefreshCompletion>,
+    done_tx: &mpsc::UnboundedSender<Msg>,
 ) {
     if !matches!(store.state.screen, Screen::Home) {
         return;
@@ -218,7 +219,7 @@ pub(crate) fn schedule_balance_sidebar_refresh(
             .map(|d| d.events.clone())
             .unwrap_or_default();
         let exec_result = outcome.map(|_| ());
-        let _ = tx.send((nonce, exec_result, events));
+        let _ = tx.send(Msg::Balance((nonce, exec_result, events)));
     });
 }
 
@@ -238,7 +239,7 @@ pub(crate) fn apply_balance_sidebar_result(
 /// Resolve primary `.nock` name for an address already shown on home/receive.
 pub(crate) fn schedule_nockname_resolve(
     address: String,
-    done_tx: &mpsc::UnboundedSender<HomeIdentityCompletion>,
+    done_tx: &mpsc::UnboundedSender<Msg>,
 ) {
     let tx = done_tx.clone();
     tokio::task::spawn_local(async move {
@@ -246,7 +247,7 @@ pub(crate) fn schedule_nockname_resolve(
             .await
             .ok()
             .flatten();
-        let _ = tx.send((Some(address), nockname));
+        let _ = tx.send(Msg::Identity((Some(address), nockname)));
     });
 }
 
@@ -254,7 +255,7 @@ pub(crate) fn schedule_nockname_resolve(
 pub(crate) fn schedule_home_identity_fetch(
     store: &mut UIStore,
     rt: &TuiRuntime,
-    done_tx: &mpsc::UnboundedSender<HomeIdentityCompletion>,
+    done_tx: &mpsc::UnboundedSender<Msg>,
 ) {
     if !matches!(store.state.screen, Screen::Home) {
         return;
@@ -288,7 +289,7 @@ pub(crate) fn schedule_home_identity_fetch(
             Some(a) => crate::nns::resolve_primary_name(a).await.ok().flatten(),
             None => None,
         };
-        let _ = tx.send((address, nockname));
+        let _ = tx.send(Msg::Identity((address, nockname)));
     });
 }
 
@@ -305,7 +306,7 @@ pub(crate) fn apply_job_result(
     result: Result<(), String>,
     events: Vec<WalletEvent>,
     output: String,
-    identity_done_tx: &mpsc::UnboundedSender<HomeIdentityCompletion>,
+    identity_done_tx: &mpsc::UnboundedSender<Msg>,
 ) {
     let receive_fetch = matches!(
         &store.state.screen,
@@ -329,24 +330,18 @@ pub(crate) fn apply_job_result(
 }
 
 /// Query NNS registry for name availability (background HTTP).
-pub(crate) fn schedule_nns_lookup(
-    raw: String,
-    done_tx: mpsc::UnboundedSender<NnsLookupCompletion>,
-) {
+pub(crate) fn schedule_nns_lookup(raw: String, done_tx: mpsc::UnboundedSender<Msg>) {
     tokio::task::spawn_local(async move {
         let result = crate::nns::lookup_name(&raw).await;
-        let _ = done_tx.send(result);
+        let _ = done_tx.send(Msg::NnsLookup(result));
     });
 }
 
 /// Query NNS registry for all verified names owned by an address (background HTTP).
-pub(crate) fn schedule_nns_verified_names(
-    address: String,
-    done_tx: mpsc::UnboundedSender<OwnedNnsNamesCompletion>,
-) {
+pub(crate) fn schedule_nns_verified_names(address: String, done_tx: mpsc::UnboundedSender<Msg>) {
     tokio::task::spawn_local(async move {
         let result = crate::nns::list_verified_names(&address).await;
-        let _ = done_tx.send(result);
+        let _ = done_tx.send(Msg::OwnedNnsNames(result));
     });
 }
 
@@ -355,7 +350,7 @@ pub(crate) fn schedule_send_simple_plan(
     rt: TuiRuntime,
     recipient: String,
     amount_nicks: u64,
-    done_tx: mpsc::UnboundedSender<SendSimplePlanCompletion>,
+    done_tx: mpsc::UnboundedSender<Msg>,
 ) {
     tokio::task::spawn_local(async move {
         let listen = crate::session::current_api_listen(&rt);
@@ -366,7 +361,7 @@ pub(crate) fn schedule_send_simple_plan(
             Ok(r) => Err(r.error.unwrap_or_else(|| "Planning failed".into())),
             Err(e) => Err(e),
         };
-        let _ = done_tx.send(result);
+        let _ = done_tx.send(Msg::Plan(result));
     });
 }
 
@@ -431,7 +426,7 @@ pub(crate) async fn execute_create_and_send(
 pub(crate) fn schedule_send_simple_create_and_send(
     store: &mut UIStore,
     rt: &TuiRuntime,
-    done_tx: mpsc::UnboundedSender<JobCompletion>,
+    done_tx: mpsc::UnboundedSender<Msg>,
     recipient: String,
     amount_nicks: u64,
 ) {
@@ -441,7 +436,7 @@ pub(crate) fn schedule_send_simple_create_and_send(
     let cmd = match crate::send_simple::build_simple_send_tx(&recipient, amount_nicks) {
         Ok(c) => c,
         Err(e) => {
-            let _ = done_tx.send((Err(e), Vec::new(), String::new()));
+            let _ = done_tx.send(Msg::Job((Err(e), Vec::new(), String::new())));
             return;
         }
     };
@@ -457,7 +452,7 @@ pub(crate) fn schedule_send_simple_create_and_send(
         let resp =
             create_and_send_simple(&listen, rt.api_auth_token.as_ref(), &recipient, amount_nicks)
                 .await;
-        let _ = done_tx.send(http_completion(resp));
+        let _ = done_tx.send(Msg::Job(http_completion(resp)));
     });
 }
 
@@ -465,7 +460,7 @@ pub(crate) fn schedule_send_simple_create_and_send(
 pub(crate) fn schedule_nns_register(
     store: &mut UIStore,
     rt: &TuiRuntime,
-    done_tx: mpsc::UnboundedSender<JobCompletion>,
+    done_tx: mpsc::UnboundedSender<Msg>,
     canonical_name: &str,
 ) -> Result<(), String> {
     if matches!(store.state.screen, Screen::Running { .. }) {
@@ -484,7 +479,7 @@ pub(crate) fn schedule_nns_register(
     tokio::task::spawn_local(async move {
         let listen = crate::session::current_api_listen(&rt);
         let resp = nns_register(&listen, rt.api_auth_token.as_ref(), &name).await;
-        let _ = done_tx.send(http_completion(resp));
+        let _ = done_tx.send(Msg::Job(http_completion(resp)));
     });
     Ok(())
 }
@@ -560,11 +555,8 @@ fn parse_tx_paths_from_markdown(markdown: &str) -> Vec<String> {
         .collect()
 }
 
-/// Spawn CoinGecko price fetch (result delivered on `price_done_tx`).
-pub(crate) fn schedule_price_fetch(
-    store: &mut UIStore,
-    price_done_tx: &mpsc::UnboundedSender<Result<f64, String>>,
-) {
+/// Spawn CoinGecko price fetch (result delivered as [`Msg::Price`]).
+pub(crate) fn schedule_price_fetch(store: &mut UIStore, price_done_tx: &mpsc::UnboundedSender<Msg>) {
     use super::store::price_fetch_stale;
 
     if store.state.price.loading {
@@ -577,6 +569,6 @@ pub(crate) fn schedule_price_fetch(
     let tx = price_done_tx.clone();
     tokio::task::spawn_local(async move {
         let result = super::components::price::fetch_nock_usd().await;
-        let _ = tx.send(result);
+        let _ = tx.send(Msg::Price(result));
     });
 }

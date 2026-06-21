@@ -8,7 +8,8 @@ use tracing::warn;
 
 use super::input::{edit_line, esc_back, list_activate};
 use crate::actions::{self, MenuAction, MenuItem};
-use crate::command_runner::{JobCompletion, TuiRuntime};
+use crate::command_runner::TuiRuntime;
+use crate::msg::Msg;
 use crate::components::menus::{BOOL, SETTINGS_MENU};
 use crate::hooks::logging::{log_help, log_verbose_info};
 use crate::screens::{Screen, TextThen, TuiControl};
@@ -41,7 +42,7 @@ pub(super) fn navigate_main_menu_item(store: &mut UIStore, i: usize) {
 pub(super) fn run_menu(
     store: &mut UIStore,
     rt: &TuiRuntime,
-    done_tx: &mpsc::UnboundedSender<JobCompletion>,
+    done_tx: &mpsc::UnboundedSender<Msg>,
     key: KeyEvent,
     cur_sel: usize,
     items: &[MenuItem],
@@ -63,7 +64,7 @@ pub(super) fn run_menu(
 fn apply_menu_action(
     store: &mut UIStore,
     rt: &TuiRuntime,
-    done_tx: &mpsc::UnboundedSender<JobCompletion>,
+    done_tx: &mpsc::UnboundedSender<Msg>,
     action: &MenuAction,
     rebuild: fn(usize) -> Screen,
     sel: usize,

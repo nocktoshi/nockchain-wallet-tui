@@ -7,9 +7,10 @@ use tokio::sync::mpsc;
 use super::input::{esc_back, try_output_scroll_keys};
 use super::replace_screen;
 use crate::command_runner::{
-    schedule_send_simple_create_and_send, schedule_send_simple_plan, JobCompletion,
-    SendSimplePlanCompletion, TuiRuntime,
+    schedule_send_simple_create_and_send, schedule_send_simple_plan, SendSimplePlanCompletion,
+    TuiRuntime,
 };
+use crate::msg::Msg;
 use crate::screens::{Screen, SendSimpleFocus, SendSimplePhase, TuiControl};
 use crate::send_simple::{max_amount_string, validate_send};
 use crate::store::{UIStore, UiAction};
@@ -18,8 +19,7 @@ pub(super) async fn handle_send_simple(
     store: &mut UIStore,
     key: KeyEvent,
     rt: &TuiRuntime,
-    done_tx: &mpsc::UnboundedSender<JobCompletion>,
-    plan_done_tx: &mpsc::UnboundedSender<SendSimplePlanCompletion>,
+    msg_tx: &mpsc::UnboundedSender<Msg>,
 ) -> Result<TuiControl, NockAppError> {
     let taken = store.state.screen.clone();
     let Screen::SendSimple {
@@ -43,7 +43,7 @@ pub(super) async fn handle_send_simple(
                 store,
                 key,
                 rt,
-                done_tx,
+                msg_tx,
                 amount,
                 recipient,
                 amount_cursor,
@@ -107,7 +107,7 @@ pub(super) async fn handle_send_simple(
                             review_scroll: 0,
                         },
                     );
-                    schedule_send_simple_plan(rt.clone(), to, amount_nicks, plan_done_tx.clone());
+                    schedule_send_simple_plan(rt.clone(), to, amount_nicks, msg_tx.clone());
                     return Ok(TuiControl::Continue);
                 }
                 Err(e) => status = Some(e),
@@ -184,7 +184,7 @@ async fn handle_send_simple_review(
     store: &mut UIStore,
     key: KeyEvent,
     rt: &TuiRuntime,
-    done_tx: &mpsc::UnboundedSender<JobCompletion>,
+    done_tx: &mpsc::UnboundedSender<Msg>,
     amount: String,
     recipient: String,
     amount_cursor: usize,

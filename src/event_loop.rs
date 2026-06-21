@@ -1,9 +1,9 @@
 //! Ratatui terminal: async event loop and suspend/resume around wallet I/O.
 //!
-//! **Input:** key events are read on a background thread and sent over an unbounded channel;
-//! `tokio::select!` merges them with a tick for spinners. **Paste:** bracketed paste mode is
-//! enabled so terminals emit `Event::Paste` with full clipboard text (needed for address fields
-//! and other line editors). Drawing lives in [`super::components`].
+//! **Input:** key events are read on a background thread and sent over an unbounded channel.
+//! **Completions:** all background work reports back through one [`Msg`] channel (see [`crate::msg`]).
+//! `tokio::select!` merges input, completions, and a spinner tick. Drawing lives in
+//! [`super::components`].
 
 use std::io::{self, stdout};
 use std::time::Duration;
@@ -15,15 +15,13 @@ use nockapp::NockAppError;
 use tokio::sync::mpsc;
 use tokio::task::LocalSet;
 
-use super::command_runner::{
-    self, BalanceRefreshCompletion, HomeIdentityCompletion, JobCompletion, NnsLookupCompletion,
-    OwnedNnsNamesCompletion, SendSimplePlanCompletion, TuiRuntime,
-};
+use super::command_runner::{self, TuiRuntime};
 use super::components::root::draw_ui;
 use super::handlers;
 use super::hooks::events::spawn_crossterm_channel;
 use super::hooks::terminal::{restore_terminal, Term};
-use super::screens::Screen;
+use super::msg::Msg;
+use super::screens::{Screen, TuiControl};
 use super::store::{UIStore, UiAction};
 use crate::wallet_api::TuiApiJob;
 
@@ -34,19 +32,50 @@ pub(crate) fn io_err(e: io::Error) -> NockAppError {
 pub(super) async fn run(
     rt: TuiRuntime,
     api_job_rx: mpsc::Receiver<TuiApiJob>,
-    price_done_tx: mpsc::UnboundedSender<Result<f64, String>>,
-    price_done_rx: mpsc::UnboundedReceiver<Result<f64, String>>,
 ) -> Result<(), NockAppError> {
-    LocalSet::new()
-        .run_until(run_inner(rt, api_job_rx, price_done_tx, price_done_rx))
-        .await
+    LocalSet::new().run_until(run_inner(rt, api_job_rx)).await
+}
+
+/// Route one async completion to its reducer (and schedule any follow-up work).
+fn handle_msg(
+    store: &mut UIStore,
+    rt: &TuiRuntime,
+    msg: Msg,
+    msg_tx: &mpsc::UnboundedSender<Msg>,
+) {
+    match msg {
+        Msg::Job((res, events, output)) => {
+            command_runner::apply_job_result(store, res, events, output, msg_tx);
+        }
+        Msg::Balance((nonce, res, events)) => {
+            let ok = res.is_ok();
+            command_runner::apply_balance_sidebar_result(store, nonce, res, events);
+            if ok {
+                command_runner::schedule_price_fetch(store, msg_tx);
+                command_runner::schedule_home_identity_fetch(store, rt, msg_tx);
+            }
+        }
+        Msg::Plan(result) => handlers::apply_send_simple_plan_result(store, result),
+        Msg::NnsLookup(result) => handlers::apply_nns_lookup_result(store, result),
+        Msg::OwnedNnsNames(result) => {
+            if let Ok(names) = result {
+                store.dispatch(UiAction::NnsOwnedNamesLoaded { names });
+                store.dispatch(UiAction::Tick);
+            }
+        }
+        Msg::Identity((address, nockname)) => {
+            command_runner::apply_home_identity_result(store, address, nockname);
+        }
+        Msg::Price(result) => match result {
+            Ok(usd) => store.dispatch(UiAction::PriceFetched { usd_per_coin: usd }),
+            Err(m) => store.dispatch(UiAction::PriceFetchFailed { msg: m }),
+        },
+    }
 }
 
 async fn run_inner(
     rt: TuiRuntime,
     api_job_rx: mpsc::Receiver<TuiApiJob>,
-    price_done_tx: mpsc::UnboundedSender<Result<f64, String>>,
-    mut price_done_rx: mpsc::UnboundedReceiver<Result<f64, String>>,
 ) -> Result<(), NockAppError> {
     let rt_api = rt.clone();
     let api_task = tokio::task::spawn_local(async move {
@@ -62,17 +91,7 @@ async fn run_inner(
     let terminal = std::sync::Arc::new(tokio::sync::Mutex::new(terminal));
 
     let mut ev_rx = spawn_crossterm_channel();
-
-    let (job_done_tx, mut job_done_rx) = mpsc::unbounded_channel::<JobCompletion>();
-    let (balance_done_tx, mut balance_done_rx) =
-        mpsc::unbounded_channel::<BalanceRefreshCompletion>();
-    let (plan_done_tx, mut plan_done_rx) = mpsc::unbounded_channel::<SendSimplePlanCompletion>();
-    let (nns_lookup_done_tx, mut nns_lookup_done_rx) =
-        mpsc::unbounded_channel::<NnsLookupCompletion>();
-    let (owned_nns_names_done_tx, mut owned_nns_names_done_rx) =
-        mpsc::unbounded_channel::<OwnedNnsNamesCompletion>();
-    let (identity_done_tx, mut identity_done_rx) =
-        mpsc::unbounded_channel::<HomeIdentityCompletion>();
+    let (msg_tx, mut msg_rx) = mpsc::unbounded_channel::<Msg>();
 
     let mut store = UIStore::new(Screen::Splash);
     let _ = super::session::refresh_session_from_api(&rt).await;
@@ -89,60 +108,9 @@ async fn run_inner(
 
         tokio::select! {
             biased;
-            maybe_job = job_done_rx.recv() => {
-                if let Some((res, captured, output)) = maybe_job {
-                    command_runner::apply_job_result(
-                        &mut store,
-                        res,
-                        captured,
-                        output,
-                        &identity_done_tx,
-                    );
-                }
-            }
-            maybe_bal = balance_done_rx.recv() => {
-                if let Some((nonce, res, captured)) = maybe_bal {
-                    let ok = res.is_ok();
-                    command_runner::apply_balance_sidebar_result(&mut store, nonce, res, captured);
-                    if ok {
-                        command_runner::schedule_price_fetch(&mut store, &price_done_tx);
-                        command_runner::schedule_home_identity_fetch(
-                            &mut store,
-                            &rt,
-                            &identity_done_tx,
-                        );
-                    }
-                }
-            }
-            maybe_plan = plan_done_rx.recv() => {
-                if let Some(result) = maybe_plan {
-                    handlers::apply_send_simple_plan_result(&mut store, result);
-                }
-            }
-            maybe_nns = nns_lookup_done_rx.recv() => {
-                if let Some(result) = maybe_nns {
-                    handlers::apply_nns_lookup_result(&mut store, result);
-                }
-            }
-            maybe_owned_nns = owned_nns_names_done_rx.recv() => {
-                if let Some(result) = maybe_owned_nns {
-                    if let Ok(names) = result {
-                        store.dispatch(UiAction::NnsOwnedNamesLoaded { names });
-                        store.dispatch(UiAction::Tick);
-                    }
-                }
-            }
-            maybe_identity = identity_done_rx.recv() => {
-                if let Some((address, nockname)) = maybe_identity {
-                    command_runner::apply_home_identity_result(&mut store, address, nockname);
-                }
-            }
-            maybe_price = price_done_rx.recv() => {
-                if let Some(result) = maybe_price {
-                    match result {
-                        Ok(usd) => store.dispatch(UiAction::PriceFetched { usd_per_coin: usd }),
-                        Err(msg) => store.dispatch(UiAction::PriceFetchFailed { msg }),
-                    }
+            maybe_msg = msg_rx.recv() => {
+                if let Some(msg) = maybe_msg {
+                    handle_msg(&mut store, &rt, msg, &msg_tx);
                 }
             }
             _ = interval.tick() => {
@@ -154,29 +122,11 @@ async fn run_inner(
                         if key.kind == KeyEventKind::Release {
                             continue;
                         }
-                        match handlers::dispatch_key(
-                            &rt,
-                            &mut store,
-                            key,
-                            &terminal,
-                            &job_done_tx,
-                            &balance_done_tx,
-                            &price_done_tx,
-                            &plan_done_tx,
-                            &nns_lookup_done_tx,
-                            &owned_nns_names_done_tx,
-                        )
-                        .await
-                        {
-                            Ok(super::screens::TuiControl::Continue) => {}
-                            Ok(super::screens::TuiControl::Quit) => break Ok(()),
+                        match handlers::dispatch_key(&rt, &mut store, key, &terminal, &msg_tx).await {
+                            Ok(TuiControl::Continue) => {}
+                            Ok(TuiControl::Quit) => break Ok(()),
                             Err(e) => {
-                                if let Some(h) = rt.api_server.lock().unwrap().take() {
-                                    h.stop();
-                                }
-                                api_task.abort();
-                                let mut term_guard = terminal.lock().await;
-                                let _ = restore_terminal(&mut term_guard);
+                                shutdown(&rt, &api_task, &terminal).await;
                                 break Err(e);
                             }
                         }
@@ -187,20 +137,14 @@ async fn run_inner(
                             &mut store,
                             text,
                             &rt,
-                            &balance_done_tx,
-                            &price_done_tx,
+                            &msg_tx,
                         )
-                            .await
+                        .await
                         {
-                            Ok(super::screens::TuiControl::Continue) => {}
-                            Ok(super::screens::TuiControl::Quit) => break Ok(()),
+                            Ok(TuiControl::Continue) => {}
+                            Ok(TuiControl::Quit) => break Ok(()),
                             Err(e) => {
-                                if let Some(h) = rt.api_server.lock().unwrap().take() {
-                                    h.stop();
-                                }
-                                api_task.abort();
-                                let mut term_guard = terminal.lock().await;
-                                let _ = restore_terminal(&mut term_guard);
+                                shutdown(&rt, &api_task, &terminal).await;
                                 break Err(e);
                             }
                         }
@@ -211,14 +155,20 @@ async fn run_inner(
         }
     };
 
-    // Hardened cleanup: always stop the background API server thread
-    // and abort the job-loop task, even on early exit or panic paths.
+    shutdown(&rt, &api_task, &terminal).await;
+    result
+}
+
+/// Stop the background API server, abort the job loop, and restore the terminal.
+async fn shutdown(
+    rt: &TuiRuntime,
+    api_task: &tokio::task::JoinHandle<()>,
+    terminal: &std::sync::Arc<tokio::sync::Mutex<Term>>,
+) {
     if let Some(h) = rt.api_server.lock().unwrap().take() {
         h.stop();
     }
     api_task.abort();
-
     let mut term_guard = terminal.lock().await;
     let _ = restore_terminal(&mut term_guard);
-    result
 }

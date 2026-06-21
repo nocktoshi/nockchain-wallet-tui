@@ -5,8 +5,9 @@ use nockapp::NockAppError;
 use nockchain_types::common::Hash;
 use tokio::sync::mpsc;
 
-use super::command_runner::{schedule_wallet_command, JobCompletion, TuiRuntime};
+use super::command_runner::{schedule_wallet_command, TuiRuntime};
 use super::create_tx::{CreateTxWizard, OptSub, Phase, RecSub};
+use crate::msg::Msg;
 use super::screens::{Screen, TuiControl};
 use super::store::{UIStore, UiAction};
 use nockchain_wallet::command::NoteSelectionStrategyCli;
@@ -16,7 +17,7 @@ pub(super) async fn handle_create_tx(
     store: &mut UIStore,
     key: KeyEvent,
     rt: &TuiRuntime,
-    done_tx: &mpsc::UnboundedSender<JobCompletion>,
+    done_tx: &mpsc::UnboundedSender<Msg>,
 ) -> Result<TuiControl, NockAppError> {
     let screen = &mut store.state.screen;
     let Screen::CreateTx { w } = screen else {

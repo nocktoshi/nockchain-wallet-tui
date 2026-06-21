@@ -7,8 +7,9 @@ use tokio::sync::mpsc;
 use super::input::esc_back;
 use super::replace_screen;
 use crate::command_runner::{
-    schedule_nns_lookup, schedule_nns_register, JobCompletion, NnsLookupCompletion, TuiRuntime,
+    schedule_nns_lookup, schedule_nns_register, NnsLookupCompletion, TuiRuntime,
 };
+use crate::msg::Msg;
 use crate::nns;
 use crate::screens::{NnsBuyFocus, Screen, TuiControl};
 use crate::store::UIStore;
@@ -58,8 +59,7 @@ pub(super) async fn handle_nns_buy(
     store: &mut UIStore,
     key: KeyEvent,
     rt: &TuiRuntime,
-    done_tx: &mpsc::UnboundedSender<JobCompletion>,
-    lookup_done_tx: &mpsc::UnboundedSender<NnsLookupCompletion>,
+    msg_tx: &mpsc::UnboundedSender<Msg>,
 ) -> Result<TuiControl, NockAppError> {
     let taken = store.state.screen.clone();
     let Screen::NnsBuy {
@@ -106,7 +106,7 @@ pub(super) async fn handle_nns_buy(
         }
         KeyCode::Enter => match focus {
             NnsBuyFocus::Search => {
-                start_lookup(store, &value, lookup_done_tx);
+                start_lookup(store, &value, msg_tx);
                 return Ok(TuiControl::Continue);
             }
             NnsBuyFocus::Cancel => {
@@ -142,7 +142,7 @@ pub(super) async fn handle_nns_buy(
                             false,
                         ),
                     );
-                    if let Err(e) = schedule_nns_register(store, rt, done_tx.clone(), &canonical) {
+                    if let Err(e) = schedule_nns_register(store, rt, msg_tx.clone(), &canonical) {
                         replace_screen(
                             store,
                             make_nns_buy(
@@ -161,7 +161,7 @@ pub(super) async fn handle_nns_buy(
                 }
             }
             NnsBuyFocus::Name => {
-                start_lookup(store, &value, lookup_done_tx);
+                start_lookup(store, &value, msg_tx);
                 return Ok(TuiControl::Continue);
             }
         },
@@ -201,7 +201,7 @@ pub(super) async fn handle_nns_buy(
 fn start_lookup(
     store: &mut UIStore,
     value: &str,
-    lookup_done_tx: &mpsc::UnboundedSender<NnsLookupCompletion>,
+    msg_tx: &mpsc::UnboundedSender<Msg>,
 ) {
     let Screen::NnsBuy {
         cursor,
@@ -225,7 +225,7 @@ fn start_lookup(
             false,
         ),
     );
-    schedule_nns_lookup(value.to_string(), lookup_done_tx.clone());
+    schedule_nns_lookup(value.to_string(), msg_tx.clone());
 }
 
 /// Centralized constructor so adding fields only touches one place.

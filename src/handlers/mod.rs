@@ -17,25 +17,23 @@ use nockapp::NockAppError;
 use tokio::sync::{mpsc, Mutex};
 
 use super::app_state::status_modal_visible;
-use super::command_runner::{
-    BalanceRefreshCompletion, JobCompletion, NnsLookupCompletion,
-    OwnedNnsNamesCompletion, TuiRuntime, SendSimplePlanCompletion,
-};
+use super::command_runner::{NnsLookupCompletion, SendSimplePlanCompletion, TuiRuntime};
 use super::ct_dispatch;
 use super::hooks::terminal::Term;
 use super::prompt_overlay::has_prompt_overlay;
-use super::screens::{TuiControl, Screen};
+use super::screens::{Screen, TuiControl};
 use super::store::{UIStore, UiAction};
+use crate::msg::Msg;
 use nockchain_wallet::command::Commands;
 
 fn schedule_cmd(
     store: &mut UIStore,
     rt: &TuiRuntime,
-    done_tx: &mpsc::UnboundedSender<JobCompletion>,
+    msg_tx: &mpsc::UnboundedSender<Msg>,
     cmd: Commands,
     label: &'static str,
 ) {
-    super::command_runner::schedule_wallet_command(store, rt, done_tx.clone(), cmd, label);
+    super::command_runner::schedule_wallet_command(store, rt, msg_tx.clone(), cmd, label);
 }
 
 /// Current selection index for any catalog-driven list menu.
@@ -72,12 +70,7 @@ pub(super) async fn dispatch_key(
     store: &mut UIStore,
     key: KeyEvent,
     terminal: &Arc<Mutex<Term>>,
-    done_tx: &mpsc::UnboundedSender<JobCompletion>,
-    balance_done_tx: &mpsc::UnboundedSender<BalanceRefreshCompletion>,
-    price_done_tx: &mpsc::UnboundedSender<Result<f64, String>>,
-    plan_done_tx: &mpsc::UnboundedSender<SendSimplePlanCompletion>,
-    nns_lookup_done_tx: &mpsc::UnboundedSender<NnsLookupCompletion>,
-    owned_nns_names_done_tx: &mpsc::UnboundedSender<OwnedNnsNamesCompletion>,
+    msg_tx: &mpsc::UnboundedSender<Msg>,
 ) -> Result<TuiControl, NockAppError> {
     if key.kind == KeyEventKind::Release {
         return Ok(TuiControl::Continue);
@@ -91,8 +84,8 @@ pub(super) async fn dispatch_key(
     }
     if matches!(store.state.screen, Screen::Splash) {
         store.dispatch(UiAction::EnterMainFromSplash);
-        super::command_runner::schedule_balance_sidebar_refresh(store, rt, balance_done_tx);
-        super::command_runner::schedule_price_fetch(store, price_done_tx);
+        super::command_runner::schedule_balance_sidebar_refresh(store, rt, msg_tx);
+        super::command_runner::schedule_price_fetch(store, msg_tx);
         return Ok(TuiControl::Continue);
     }
     if status_modal_visible(&store.state)
@@ -115,9 +108,7 @@ pub(super) async fn dispatch_key(
     }
     let result = match &mut store.state.screen {
         Screen::Splash => Ok(TuiControl::Continue),
-        Screen::Home => {
-            home::handle_home(store, key, rt, done_tx, balance_done_tx, price_done_tx).await
-        }
+        Screen::Home => home::handle_home(store, key, rt, msg_tx).await,
         Screen::Receive { .. } => receive::handle_receive(store, key).await,
         Screen::NnsBuy { .. } => {
             // Trigger owned names fetch if we haven't loaded them yet
@@ -130,74 +121,71 @@ pub(super) async fn dispatch_key(
                 if owned_names.is_empty() && !*owned_names_loading {
                     if let Some(addr) = store.state.balance_panel.address.clone() {
                         *owned_names_loading = true;
-                        super::command_runner::schedule_nns_verified_names(
-                            addr,
-                            owned_nns_names_done_tx.clone(),
-                        );
+                        super::command_runner::schedule_nns_verified_names(addr, msg_tx.clone());
                     }
                 }
             }
-            nns_buy::handle_nns_buy(store, key, rt, done_tx, nns_lookup_done_tx).await
+            nns_buy::handle_nns_buy(store, key, rt, msg_tx).await
         }
         Screen::SendSimple { .. } => {
-            send_simple::handle_send_simple(store, key, rt, done_tx, plan_done_tx).await
+            send_simple::handle_send_simple(store, key, rt, msg_tx).await
         }
         Screen::Keys { .. } => {
             let s = menu_sel(&store.state.screen);
             Ok(menus::run_menu(
-                store, rt, done_tx, key, s, crate::actions::KEYS_ITEMS,
+                store, rt, msg_tx, key, s, crate::actions::KEYS_ITEMS,
                 |sel| Screen::Keys { sel }, Screen::Home,
             ))
         }
         Screen::KeysImport { .. } => {
             let s = menu_sel(&store.state.screen);
             Ok(menus::run_menu(
-                store, rt, done_tx, key, s, crate::actions::KEYS_IMPORT_ITEMS,
+                store, rt, msg_tx, key, s, crate::actions::KEYS_IMPORT_ITEMS,
                 |sel| Screen::KeysImport { sel }, Screen::Keys { sel: 2 },
             ))
         }
         Screen::Notes { .. } => {
             let s = menu_sel(&store.state.screen);
             Ok(menus::run_menu(
-                store, rt, done_tx, key, s, crate::actions::NOTES_ITEMS,
+                store, rt, msg_tx, key, s, crate::actions::NOTES_ITEMS,
                 |sel| Screen::Notes { sel }, Screen::Home,
             ))
         }
         Screen::Transactions { .. } => {
             let s = menu_sel(&store.state.screen);
             Ok(menus::run_menu(
-                store, rt, done_tx, key, s, crate::actions::TX_ITEMS,
+                store, rt, msg_tx, key, s, crate::actions::TX_ITEMS,
                 |sel| Screen::Transactions { sel }, Screen::Home,
             ))
         }
         Screen::Watch { .. } => {
             let s = menu_sel(&store.state.screen);
             Ok(menus::run_menu(
-                store, rt, done_tx, key, s, crate::actions::WATCH_ITEMS,
+                store, rt, msg_tx, key, s, crate::actions::WATCH_ITEMS,
                 |sel| Screen::Watch { sel }, Screen::Home,
             ))
         }
         Screen::SignVerify { .. } => {
             let s = menu_sel(&store.state.screen);
             Ok(menus::run_menu(
-                store, rt, done_tx, key, s, crate::actions::SIGN_ITEMS,
+                store, rt, msg_tx, key, s, crate::actions::SIGN_ITEMS,
                 |sel| Screen::SignVerify { sel }, Screen::Home,
             ))
         }
         Screen::Settings { .. } => menus::handle_settings(store, key, rt),
         Screen::Quick { .. } => menus::handle_quick(store, key),
         Screen::TextPrompt { .. } => {
-            prompts::text_prompt(store, key, rt, terminal, done_tx).await
+            prompts::text_prompt(store, key, rt, terminal, msg_tx).await
         }
         Screen::Confirm { .. } => {
-            prompts::confirm_prompt(store, key, rt, terminal, done_tx).await
+            prompts::confirm_prompt(store, key, rt, terminal, msg_tx).await
         }
         Screen::CreateTx { .. } => {
-            ct_dispatch::handle_create_tx(store, key, rt, done_tx).await
+            ct_dispatch::handle_create_tx(store, key, rt, msg_tx).await
         }
         Screen::ExitConfirm { .. } => menus::handle_exit_confirm(store, key),
         Screen::ErrorScreen { .. } => {
-            error::error_screen(store, key, rt, terminal, done_tx).await
+            error::error_screen(store, key, rt, terminal, msg_tx).await
         }
         Screen::Running { .. } => Ok(TuiControl::Continue),
     };
@@ -214,10 +202,7 @@ pub(super) async fn dispatch_key(
         if owned_names.is_empty() && !*owned_names_loading {
             if let Some(addr) = store.state.balance_panel.address.clone() {
                 *owned_names_loading = true;
-                super::command_runner::schedule_nns_verified_names(
-                    addr,
-                    owned_nns_names_done_tx.clone(),
-                );
+                super::command_runner::schedule_nns_verified_names(addr, msg_tx.clone());
             }
         }
     }
@@ -231,13 +216,12 @@ pub(super) async fn dispatch_paste(
     store: &mut UIStore,
     pasted: String,
     rt: &TuiRuntime,
-    balance_done_tx: &mpsc::UnboundedSender<BalanceRefreshCompletion>,
-    price_done_tx: &mpsc::UnboundedSender<Result<f64, String>>,
+    msg_tx: &mpsc::UnboundedSender<Msg>,
 ) -> Result<TuiControl, NockAppError> {
     if matches!(store.state.screen, Screen::Splash) {
         store.dispatch(UiAction::EnterMainFromSplash);
-        super::command_runner::schedule_balance_sidebar_refresh(store, rt, balance_done_tx);
-        super::command_runner::schedule_price_fetch(store, price_done_tx);
+        super::command_runner::schedule_balance_sidebar_refresh(store, rt, msg_tx);
+        super::command_runner::schedule_price_fetch(store, msg_tx);
         return Ok(TuiControl::Continue);
     }
     match &mut store.state.screen {

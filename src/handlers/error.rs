@@ -7,8 +7,9 @@ use nockapp::NockAppError;
 use tokio::sync::{mpsc, Mutex};
 
 use super::input::{esc_back, list_activate};
-use crate::command_runner::{JobCompletion, TuiRuntime};
+use crate::command_runner::TuiRuntime;
 use crate::create_tx::CreateTxWizard;
+use crate::msg::Msg;
 use crate::hooks::terminal::Term;
 use crate::screens::{ErrorCtx, Screen, TuiControl};
 use crate::store::UIStore;
@@ -19,7 +20,7 @@ pub(super) async fn error_screen(
     key: KeyEvent,
     rt: &TuiRuntime,
     _terminal: &Arc<Mutex<Term>>,
-    done_tx: &mpsc::UnboundedSender<JobCompletion>,
+    done_tx: &mpsc::UnboundedSender<Msg>,
 ) -> Result<TuiControl, NockAppError> {
     let state = store.state.screen.clone();
     super::replace_screen(store, Screen::Home);

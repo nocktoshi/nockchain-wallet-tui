@@ -7,6 +7,7 @@ use super::input::{esc_back, list_activate};
 use super::{replace_screen, schedule_cmd};
 use crate::command_runner::TuiRuntime;
 use crate::components::home::cta_key_to_index;
+use crate::msg::Msg;
 use crate::components::menus::MAIN_MENU;
 use crate::screens::{Screen, TuiControl};
 use crate::store::{UIStore, UiAction};
@@ -17,9 +18,7 @@ pub(super) async fn handle_home(
     store: &mut UIStore,
     key: KeyEvent,
     rt: &TuiRuntime,
-    done_tx: &mpsc::UnboundedSender<crate::command_runner::JobCompletion>,
-    _balance_done_tx: &mpsc::UnboundedSender<crate::command_runner::BalanceRefreshCompletion>,
-    price_done_tx: &mpsc::UnboundedSender<Result<f64, String>>,
+    msg_tx: &mpsc::UnboundedSender<Msg>,
 ) -> Result<TuiControl, NockAppError> {
     match key.code {
         KeyCode::Left | KeyCode::Char('h') => {
@@ -39,12 +38,12 @@ pub(super) async fn handle_home(
             return Ok(TuiControl::Continue);
         }
         KeyCode::Char('r') if store.state.home_tab == 0 => {
-            super::super::command_runner::schedule_price_fetch(store, price_done_tx);
+            super::super::command_runner::schedule_price_fetch(store, msg_tx);
             replace_screen(store, Screen::receive_new(true));
             schedule_cmd(
                 store,
                 rt,
-                done_tx,
+                msg_tx,
                 Commands::ListActiveAddresses,
                 "ListActiveAddresses",
             );
@@ -64,12 +63,12 @@ pub(super) async fn handle_home(
                     return Ok(TuiControl::Continue);
                 }
                 Some(1) => {
-                    super::super::command_runner::schedule_price_fetch(store, price_done_tx);
+                    super::super::command_runner::schedule_price_fetch(store, msg_tx);
                     replace_screen(store, Screen::receive_new(true));
                     schedule_cmd(
                         store,
                         rt,
-                        done_tx,
+                        msg_tx,
                         Commands::ListActiveAddresses,
                         "ListActiveAddresses",
                     );

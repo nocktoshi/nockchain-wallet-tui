@@ -11,6 +11,7 @@ mod event_loop;
 mod format;
 mod handlers;
 mod hooks;
+mod msg;
 mod nns;
 mod paste;
 mod prompt_overlay;
@@ -64,7 +65,6 @@ pub async fn run_with_options(
     let wallet = Arc::new(Mutex::new(wallet));
     let snapshot = Arc::new(Mutex::new(synced_snapshot_for_planner));
     let (api_job_tx, api_job_rx) = mpsc::channel::<TuiApiJob>(32);
-    let (price_done_tx, price_done_rx) = mpsc::unbounded_channel();
     let rt = TuiRuntime {
         wallet: Arc::clone(&wallet),
         snapshot: Arc::clone(&snapshot),
@@ -78,7 +78,7 @@ pub async fn run_with_options(
         api_server: Arc::new(std::sync::Mutex::new(None)),
     };
     session::apply_session_to_cli(&rt);
-    event_loop::run(rt, api_job_rx, price_done_tx, price_done_rx).await
+    event_loop::run(rt, api_job_rx).await
 }
 
 #[cfg(test)]
