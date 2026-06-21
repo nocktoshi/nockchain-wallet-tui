@@ -402,13 +402,25 @@ fn activity_hint_line(app: &AppState) -> Line<'static> {
                 Span::raw("cancel"),
             ]);
         }
+        if app.home_tab == 1 {
+            return Line::from(vec![
+                Span::styled("↑/↓ ", Style::default().fg(Color::Yellow)),
+                Span::raw("select  "),
+                Span::styled("Enter ", Style::default().fg(Color::Yellow)),
+                Span::raw("open  "),
+                Span::styled("←/→ ", Style::default().fg(Color::Yellow)),
+                Span::raw("tabs  "),
+                Span::styled("Esc ", Style::default().fg(THEME_MUTED)),
+                Span::raw("back"),
+            ]);
+        }
         let mut spans = vec![
             Span::styled("←/→ ", Style::default().fg(Color::Yellow)),
             Span::raw("tabs  "),
             Span::styled("s/r/n ", Style::default().fg(Color::Yellow)),
             Span::raw("actions  "),
         ];
-        if app.home_tab == 0 && app.master_picker.has_choice() {
+        if app.master_picker.has_choice() {
             spans.push(Span::styled("w ", Style::default().fg(Color::Yellow)));
             spans.push(Span::raw("wallet  "));
         }

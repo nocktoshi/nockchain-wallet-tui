@@ -1,5 +1,6 @@
 //! HTTP listener and routes (`/v1/wallet/state`, `/v1/wallet/command`).
 
+use std::future::IntoFuture;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
@@ -137,12 +138,15 @@ pub(crate) fn spawn_http_server(
                 }
             };
             info!(%addr, "wallet JSON API listening (TUI session)");
-            let serve = axum::serve(listener, app);
-            let shutdown = async {
-                let _ = shutdown_rx.await;
-            };
-            if let Err(e) = serve.with_graceful_shutdown(shutdown).await {
-                warn!("wallet API server stopped: {e}");
+            tokio::select! {
+                r = axum::serve(listener, app).into_future() => {
+                    if let Err(e) = r {
+                        warn!("wallet API server stopped: {e}");
+                    }
+                }
+                _ = shutdown_rx => {
+                    info!("wallet API stopping (TUI exit)");
+                }
             }
         });
     });

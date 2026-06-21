@@ -122,6 +122,10 @@ pub(super) async fn handle_home(
             Ok(TuiControl::Continue)
         }
         Ok(None) => {
+            if key.code == KeyCode::Esc {
+                store.dispatch(UiAction::SetHomeTab(0));
+                return Ok(TuiControl::Continue);
+            }
             if esc_back(key.code) {
                 return Ok(TuiControl::Quit);
             }
