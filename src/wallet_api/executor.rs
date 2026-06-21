@@ -5,13 +5,12 @@ use std::sync::Arc;
 use clap::Parser;
 use tokio::sync::mpsc;
 
-use super::{spawn_http_server, ApiServerHandle, TuiApiJob};
+use super::{normalize, spawn_http_server, ApiServerHandle, TuiApiJob, TuiCommandResponse};
 use crate::command_runner::{self, TuiRuntime};
 use crate::session::current_api_listen;
-use nockchain_wallet::wallet_outcome::WalletCommandJsonResponse;
 
 /// Run a wallet command from the TUI JSON API (`argv` tokens, no binary name).
-async fn execute_tui_api_command(rt: &TuiRuntime, argv: Vec<String>) -> WalletCommandJsonResponse {
+async fn execute_tui_api_command(rt: &TuiRuntime, argv: Vec<String>) -> TuiCommandResponse {
     rt.wallet_event_sink.lock().unwrap().clear();
 
     // clap expects argv[0] to be the program name; provide a dummy.
@@ -26,23 +25,20 @@ async fn execute_tui_api_command(rt: &TuiRuntime, argv: Vec<String>) -> WalletCo
 
     let command = match ApiCli::try_parse_from(full_argv) {
         Ok(cli) => cli.command,
-        Err(e) => {
-            return WalletCommandJsonResponse {
-                schema_version: nockchain_wallet::wallet_outcome::WALLET_OUTCOME_SCHEMA,
-                success: None,
-                error: Some(e.to_string()),
-            };
-        }
+        Err(e) => return TuiCommandResponse::failure(e.to_string()),
     };
 
-    eprintln!("[api] executing: {:?}", command);
-    let outcome = command_runner::run_command_on_runtime(rt, command, None, None).await;
-    let resp = WalletCommandJsonResponse::from_outcome(outcome);
-    eprintln!(
-        "[api] result: success={} error={:?}",
-        resp.success.is_some(),
-        resp.error
-    );
+    tracing::debug!(?command, "api: executing command");
+    let outcome = command_runner::run_command_on_runtime(rt, command.clone(), None, None).await;
+    let resp = match outcome {
+        Ok(data) => {
+            let markdown = rt.tui_markdown_sink.lock().unwrap().clone();
+            let reports = normalize(&data.events, &markdown, &command);
+            TuiCommandResponse::ok(data.events, reports)
+        }
+        Err(e) => TuiCommandResponse::failure(e.to_string()),
+    };
+    tracing::debug!(success = resp.is_success(), error = ?resp.error, "api: command result");
     resp
 }
 
@@ -75,13 +71,8 @@ pub(crate) async fn run_api_job_loop(rt: TuiRuntime, mut job_rx: mpsc::Receiver<
     *rt.api_server.lock().unwrap() = server;
 
     while let Some(job) = job_rx.recv().await {
-        eprintln!("[api] job received: argv={:?}", job.argv);
+        tracing::debug!(argv = ?job.argv, "api: job received");
         let resp = execute_tui_api_command(&rt, job.argv).await;
-        eprintln!(
-            "[api] result: success={} error={:?}",
-            resp.success.is_some(),
-            resp.error
-        );
         let _ = job.resp.send(resp);
     }
 

@@ -15,13 +15,13 @@ use tracing::{info, warn};
 
 use super::auth::require_api_auth;
 use super::state::{save_session_state, validate_session_state, WalletSessionState};
-use nockchain_wallet::wallet_outcome::WalletCommandJsonResponse;
+use super::TuiCommandResponse;
 
 /// Work item executed on the TUI local task set (wallet is not `Send`).
 #[derive(Debug)]
 pub(crate) struct TuiApiJob {
     pub argv: Vec<String>,
-    pub resp: oneshot::Sender<WalletCommandJsonResponse>,
+    pub resp: oneshot::Sender<TuiCommandResponse>,
 }
 
 #[derive(Clone)]
@@ -123,8 +123,10 @@ pub(crate) fn spawn_http_server(
 async fn health() -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "status": "ok",
-        "schema_version": nockchain_wallet::wallet_outcome::WALLET_OUTCOME_SCHEMA,
+        "schema_version": super::TUI_OUTCOME_SCHEMA,
         "session_schema_version": super::WALLET_SESSION_SCHEMA,
+        // Responses carry typed `events` plus normalized `reports` (markdown commands without a
+        // structured event yet). `report_section_types` describes the `reports[].sections[].type`.
         "wallet_event_kinds": [
             "balance_snapshot_v1",
             "notes_list_v1",
@@ -136,6 +138,7 @@ async fn health() -> Json<serde_json::Value> {
             "nns_registration_v1",
             "create_tx_v1"
         ],
+        "report_section_types": ["heading", "text", "key_value", "table", "raw"],
     }))
 }
 
@@ -157,7 +160,7 @@ async fn post_session(
 async fn run_command(
     State(state): State<HttpState>,
     Json(body): Json<CommandRequest>,
-) -> (StatusCode, Json<WalletCommandJsonResponse>) {
+) -> (StatusCode, Json<TuiCommandResponse>) {
     if body.argv.is_empty() {
         return bad_request("argv must contain at least one command token".into());
     }
@@ -173,7 +176,7 @@ async fn run_command(
 
     match resp_rx.await {
         Ok(json) => {
-            let status = if json.success.is_some() {
+            let status = if json.is_success() {
                 StatusCode::OK
             } else {
                 StatusCode::UNPROCESSABLE_ENTITY
@@ -184,24 +187,13 @@ async fn run_command(
     }
 }
 
-fn bad_request(msg: String) -> (StatusCode, Json<WalletCommandJsonResponse>) {
-    (
-        StatusCode::BAD_REQUEST,
-        Json(WalletCommandJsonResponse {
-            schema_version: nockchain_wallet::wallet_outcome::WALLET_OUTCOME_SCHEMA,
-            success: None,
-            error: Some(msg),
-        }),
-    )
+fn bad_request(msg: String) -> (StatusCode, Json<TuiCommandResponse>) {
+    (StatusCode::BAD_REQUEST, Json(TuiCommandResponse::failure(msg)))
 }
 
-fn server_error(msg: &str) -> (StatusCode, Json<WalletCommandJsonResponse>) {
+fn server_error(msg: &str) -> (StatusCode, Json<TuiCommandResponse>) {
     (
         StatusCode::INTERNAL_SERVER_ERROR,
-        Json(WalletCommandJsonResponse {
-            schema_version: nockchain_wallet::wallet_outcome::WALLET_OUTCOME_SCHEMA,
-            success: None,
-            error: Some(msg.to_string()),
-        }),
+        Json(TuiCommandResponse::failure(msg)),
     )
 }
